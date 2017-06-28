@@ -3,12 +3,44 @@
 
 import rospy
 import serial
+import bitstring
 
 
 class SonarNotFound(Exception):
     """Sonar port could not be found."""
     pass
 
+class Command(object):
+    """
+    Sonar commands
+    """
+    def __init__(self, id, payload = None):
+        """
+        Construct command object
+        :param id:
+        :param payload:
+        """
+        self.id = id
+        self.payload = payload if payload else bitstring.BitStream()
+
+    def serialize(self):
+        """
+        Construct string of bytes to send to sonar
+        :return:
+        """
+        values = {
+            "id": self.id,
+            "payload_length": self.payload.length,
+            "payload": self.payload
+        }
+
+        serial_format = (
+            "0x23, uint:8=id, 0x3B, bits:payload_length=payload, 0x0D0A"
+        )
+
+        message = bitstring.pack(serial_format, **values)
+
+        return message.tobytes()
 
 class Socket(object):
     """
@@ -20,7 +52,6 @@ class Socket(object):
         :param port:
         :param baudrate:
         """
-        print 'connect'
         self.conn = serial.Serial(port=port, baudrate=baudrate)
 
     def open(self):
@@ -28,6 +59,7 @@ class Socket(object):
         Opens serial connection
         :return:
         """
+        print 'send'
         self.conn.open()
 
     def close(self):
@@ -36,6 +68,16 @@ class Socket(object):
         :return:
         """
         self.conn.close()
+
+    def send(self, message, payload = None):
+        """
+
+        :param message:
+        :param payload:
+        :return:
+        """
+        cmd = Command(message, payload)
+        self.conn.write(cmd.serialize())
 
 
 class VA500(object):
@@ -48,7 +90,6 @@ class VA500(object):
         :param port:
         :param baudrate: Baud rate, 115200 by default (can be 9600-115200)
         """
-        print 'va500init'
         self.port = port
         self.baudrate = baudrate
 
@@ -71,13 +112,13 @@ class VA500(object):
         :return:
         """
         self.close()
+        rospy.loginfo("Closed sonar altimeter on %s", self.port)
 
     def open(self):
         """
         Initializes sonar connection
         :return:
         """
-        print 'open va500'
         if not self.conn:
             try:
                 self.conn = Socket(self.port, self.baudrate)
@@ -86,16 +127,16 @@ class VA500(object):
 
         rospy.loginfo("Initializing sonar altimeter on %s", self.port)
         self.initialized = True
+        self.conn.send(032)
+
 
     def close(self):
-        print('bybye')
         self.conn.close()
 
 
 if __name__ == "__main__":
     # Initialize node
     rospy.init_node('valeport_altimeter', log_level=rospy.DEBUG)
-    print 'init node'
 
     port = '/dev/ttyUSB0'
     baudrate = 115200
