@@ -12,6 +12,14 @@ class SonarNotFound(Exception):
     """Sonar port could not be found."""
     pass
 
+class PacketIncomplete(Exception):
+    """Packet is incomplete."""
+    pass
+
+class PacketCorrupted(Exception):
+    """Packet is corrupt."""
+    pass
+
 class Message(object):
     """
     Enumeration of available messages
@@ -58,6 +66,41 @@ class Message(object):
     MINIMUM_RANGE = 841
     CHANGE_SOUND_SPEED = 830
     SOUND_SPEED = 831
+
+class Reply(object):
+    """
+    Parses and verifies reply packages
+    """
+    def __init__(self, bitstream):
+        """
+
+        :param bitstream:
+        """
+        self.bitstream = bitstream
+        self.id = 0
+        self.name = "<unknown>"
+        self.payload = None
+
+        self.parse()
+
+    def parse(self):
+        """
+        Parses packet into header, message ID and payload
+        :return:
+        """
+        try:
+            # Parse message header
+            self.bitstream.bytepos = 0
+            if self.bitstream.endswith("0x0D0A"):
+                header = self.bitstream.read("uint:8")
+                print header
+            else:
+                raise PacketIncomplete("Packet does not end with carriage return")
+
+        except (ValueError,ReadError) as e:
+            raise PacketCorrupted("Unexpected error", e)
+
+
 
 
 class Command(object):
@@ -145,13 +188,15 @@ class Socket(object):
             while not self.conn.read() == "#":
                 pass
 
+            print 'ENTRO'
+
             # Read one line a t a time until packet complete and parsed
             packet = bitstring.BitStream("0x23")
 
             while True:
                 current_line = self.conn.readline()
                 for char in current_line:
-                    print 'tal'
+                    reply = Reply(packet)
 
         except select.error as (code,msg):
             if code == errno.EINTR:
