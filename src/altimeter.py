@@ -4,11 +4,61 @@
 import rospy
 import serial
 import bitstring
+import binascii
+import select
 
 
 class SonarNotFound(Exception):
     """Sonar port could not be found."""
     pass
+
+class Message(object):
+    """
+    Enumeration of available messages
+
+    """
+    # Instrument settings
+    SW_VERSION = 32
+    UNIT_SERIAL_NUM = 34
+    PCB_SERIAL_NUM = 136
+    CALIBRATION_DATE = 138
+    TRANSDUCER_FREQ = 839
+
+    # Communication settings
+    BAUD_RATE = 59
+    SET_ADDRESS_485 = 1
+    ADDRESS_485 = 2
+    ADDRESS_MODE_CONF = 5
+    ADDRESS_MODE = 6
+
+    # Analogue settings
+    SET_VOLTAGE_RANGE = 94
+    VOLTAGE_RANGE = 95
+    ANALOG_OUTPUT_TEST = 96
+    SET_ANALOG_RANGE_LIMIT = 97
+    ANALOG_RANGE_LIMIT = 98
+
+    # Sampling regime
+    SINGLE_MEASURE = 'S'
+    MEASURE = 'M'
+    SET_MEASURE_MODE = 39
+    OPERATING_MODE = 40
+    RUN = 28
+
+    # Output format
+    OUTPUT_FORMAT = 89
+    SET_OUTPUT_FORMAT = 82
+
+    # Range settings
+    SET_RANGE_UNITS = 21
+    RANGE_UNITS = 22
+    SET_ERROR_MSG = 118
+    ERROR_MSG = 119
+    MAX_RANGE = 823
+    MINIMUM_RANGE = 841
+    CHANGE_SOUND_SPEED = 830
+    SOUND_SPEED = 831
+
 
 class Command(object):
     """
@@ -20,7 +70,13 @@ class Command(object):
         :param id:
         :param payload:
         """
-        self.id = id
+        if type(id) == str:
+            self.id = bin(int(binascii.hexlify(id),8))
+        else:
+            self.id = id
+
+        print self.id
+
         self.payload = payload if payload else bitstring.BitStream()
 
     def serialize(self):
@@ -35,7 +91,7 @@ class Command(object):
         }
 
         serial_format = (
-            "0x23, uint:8=id, 0x3B, bits:payload_length=payload, 0x0D0A"
+            "0x23, id, 0x3B, bits:payload_length=payload, 0x0D0A"
         )
 
         message = bitstring.pack(serial_format, **values)
@@ -78,6 +134,31 @@ class Socket(object):
         """
         cmd = Command(message, payload)
         self.conn.write(cmd.serialize())
+
+    def get_reply(self):
+        """
+        Waits for and returns reply
+        :return:
+        """
+        try:
+            # Wait for the # character
+            while not self.conn.read() == "#":
+                pass
+
+            # Read one line a t a time until packet complete and parsed
+            packet = bitstring.BitStream("0x23")
+
+            while True:
+                current_line = self.conn.readline()
+                for char in current_line:
+                    print 'tal'
+
+        except select.error as (code,msg):
+            if code == errno.EINTR:
+                raise KeyboardInterrupt()
+            raise
+
+
 
 
 class VA500(object):
@@ -127,7 +208,9 @@ class VA500(object):
 
         rospy.loginfo("Initializing sonar altimeter on %s", self.port)
         self.initialized = True
-        self.conn.send(032)
+
+        self.conn.send(Message.SINGLE_MEASURE)
+        self.conn.get_reply()
 
 
     def close(self):
