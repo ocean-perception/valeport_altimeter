@@ -88,16 +88,18 @@ class Reply(object):
         Parses packet into header, message ID and payload
         :return:
         """
+        print 'voy ver si parseo'
         try:
             # Parse message header
             self.bitstream.bytepos = 0
             if self.bitstream.endswith("0x0D0A"):
+                print "final de linea wai"
                 header = self.bitstream.read("uint:8")
                 print header
             else:
                 raise PacketIncomplete("Packet does not end with carriage return")
 
-        except (ValueError,ReadError) as e:
+        except (ValueError,tarfile.ReadError) as e:
             raise PacketCorrupted("Unexpected error", e)
 
 
@@ -186,6 +188,7 @@ class Socket(object):
         try:
             # Wait for the # character
             while not self.conn.read() == "#":
+                print 'no almohadillarr'
                 pass
 
             print 'ENTRO'
@@ -195,6 +198,7 @@ class Socket(object):
 
             while True:
                 current_line = self.conn.readline()
+                print current_line
                 for char in current_line:
                     reply = Reply(packet)
 
