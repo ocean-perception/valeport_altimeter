@@ -287,7 +287,7 @@ class VA500(object):
         rospy.loginfo("Initializing sonar altimeter on %s", self.port)
         self.initialized = True
 
-        self.conn.send(Message.PCB_SERIAL_NUM)
+        self.conn.send(Message.TRANSDUCER_FREQ)
         self.conn.get_reply()
 
 
