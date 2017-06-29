@@ -88,12 +88,10 @@ class Reply(object):
         Parses packet into header, message ID and payload
         :return:
         """
-        print 'voy ver si parseo'
         try:
             # Parse message header
             self.bitstream.bytepos = 0
-            if self.bitstream.endswith("0x0A"):
-                print "final de linea wai"
+            if self.bitstream.endswith("\n"):
                 header = self.bitstream.read("uint:8")
                 print header
             else:
@@ -195,7 +193,6 @@ class Socket(object):
 
             # Read one line a t a time until packet complete and parsed
             packet = bitstring.BitStream("0x23")
-            print packet
 
             while True:
                 current_line = self.conn.readline()
