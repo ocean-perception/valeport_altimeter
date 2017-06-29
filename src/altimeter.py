@@ -67,6 +67,20 @@ class Message(object):
     CHANGE_SOUND_SPEED = 830
     SOUND_SPEED = 831
 
+    @classmethod
+    def to_string(cls,id):
+        """
+        Get human-readable name corresponding to message id
+        :param cls:
+        :param id: message ID
+        :return:
+        """
+        for attr, value in cls.__dict__.iteritems():
+            if value == id:
+                return attr
+        else:
+            return None
+
 class Reply(object):
     """
     Parses and verifies reply packages
@@ -91,11 +105,21 @@ class Reply(object):
         try:
             # Parse message header
             self.bitstream.bytepos = 0
+            rospy.logdebug("parsing message")
             if self.bitstream.endswith("\n"):
                 header = self.bitstream.read("uint:8")
-                print header
             else:
                 raise PacketIncomplete("Packet does not end with carriage return")
+
+            if header != 0x23:
+                raise PacketCorrupted("Unexpected header: {}".format(header))
+
+            self.bitstream.bytepos = 1
+            self.id = self.bitstream.read("uint:8")
+            print self.id
+
+            self.bitstream.bytepos = 2
+            self.payload = self.bitstream.read("uint:8")
 
         except ValueError as e:
             raise PacketCorrupted("Unexpected error", e)
@@ -117,8 +141,6 @@ class Command(object):
             self.id = bin(int(binascii.hexlify(id),8))
         else:
             self.id = id
-
-        print self.id
 
         self.payload = payload if payload else bitstring.BitStream()
 
@@ -158,7 +180,6 @@ class Socket(object):
         Opens serial connection
         :return:
         """
-        print 'send'
         self.conn.open()
 
     def close(self):
@@ -176,6 +197,7 @@ class Socket(object):
         :return:
         """
         cmd = Command(message, payload)
+        rospy.logdebug("Sending %s: %s", Message.to_string(message), payload)
         self.conn.write(cmd.serialize())
 
     def get_reply(self):
@@ -189,16 +211,25 @@ class Socket(object):
             while not self.conn.read() == "#":
                 pass
 
-            print 'ENTRO'
+            rospy.logdebug("Received valid packet (starts with '#') ")
 
             # Read one line a t a time until packet complete and parsed
             packet = bitstring.BitStream("0x23")
 
             while True:
                 current_line = self.conn.readline()
-                print current_line
                 for char in current_line:
+                    packet.append("0x{:02X}".format(ord(char)))
+
+                # Try to parse
+                try:
                     reply = Reply(packet)
+                    break
+                except PacketIncomplete:
+                    # Keep looking
+                    continue
+
+            rospy.logdebug("Received %s: %s", reply.name, reply.payload)
 
         except select.error as (code,msg):
             if code == errno.EINTR:
@@ -256,7 +287,7 @@ class VA500(object):
         rospy.loginfo("Initializing sonar altimeter on %s", self.port)
         self.initialized = True
 
-        self.conn.send(Message.SW_VERSION)
+        self.conn.send(Message.PCB_SERIAL_NUM)
         self.conn.get_reply()
 
 
@@ -272,6 +303,5 @@ if __name__ == "__main__":
     baudrate = 115200
 
     with VA500(port,baudrate) as va500_altimeter:
-        print 'jij'
+        pass
 
-    rospy.spin()
