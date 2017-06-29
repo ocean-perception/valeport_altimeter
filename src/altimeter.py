@@ -92,14 +92,14 @@ class Reply(object):
         try:
             # Parse message header
             self.bitstream.bytepos = 0
-            if self.bitstream.endswith("0x0D0A"):
+            if self.bitstream.endswith("0x0A"):
                 print "final de linea wai"
                 header = self.bitstream.read("uint:8")
                 print header
             else:
                 raise PacketIncomplete("Packet does not end with carriage return")
 
-        except (ValueError,tarfile.ReadError) as e:
+        except ValueError as e:
             raise PacketCorrupted("Unexpected error", e)
 
 
@@ -187,14 +187,15 @@ class Socket(object):
         """
         try:
             # Wait for the # character
+            # Don't put anything in this while, because if losses packets if you do so
             while not self.conn.read() == "#":
-                print 'no almohadillarr'
                 pass
 
             print 'ENTRO'
 
             # Read one line a t a time until packet complete and parsed
             packet = bitstring.BitStream("0x23")
+            print packet
 
             while True:
                 current_line = self.conn.readline()
@@ -258,7 +259,7 @@ class VA500(object):
         rospy.loginfo("Initializing sonar altimeter on %s", self.port)
         self.initialized = True
 
-        self.conn.send(Message.SINGLE_MEASURE)
+        self.conn.send(Message.SW_VERSION)
         self.conn.get_reply()
 
 
