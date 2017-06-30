@@ -6,6 +6,7 @@ import serial
 import bitstring
 import binascii
 import select
+import datetime
 
 
 class SonarNotFound(Exception):
@@ -18,6 +19,14 @@ class PacketIncomplete(Exception):
 
 class PacketCorrupted(Exception):
     """Packet is corrupt."""
+    pass
+
+class SonarNotConfigured(Exception):
+    """Sonar is not configured for scanning."""
+    pass
+
+class TimeoutError(Exception):
+    """Communication timed out."""
     pass
 
 class Message(object):
@@ -78,6 +87,18 @@ class Message(object):
         for attr, value in cls.__dict__.iteritems():
             if value == id:
                 return attr
+        else:
+            return None
+
+    @classmethod
+    def from_string(cls, name):
+        """
+        Gets message ID corresponding to human-readable name.
+        :param name: Human-readable string
+        :return:
+        """
+        if hasattr(cls,name):
+            return cls.__getattribute__(name)
         else:
             return None
 
@@ -230,6 +251,7 @@ class Socket(object):
                     continue
 
             rospy.logdebug("Received %s: %s", reply.name, reply.payload)
+            return reply
 
         except select.error as (code,msg):
             if code == errno.EINTR:
@@ -293,6 +315,76 @@ class VA500(object):
 
     def close(self):
         self.conn.close()
+
+    def scan(self):
+        """
+        Sends command to scan
+        :return:
+        """
+        # send here something to verify sonar is connected?
+        if not self.initialized:
+            raise SonarNotConfigured(self.initialized)
+        # Timeout count
+        timeout_count = 0
+        MAX_TIMEOUT_COUNT = 5
+
+        # Scan until stopped
+        self.preempted = False
+        while not self.preempted
+            # Preempt on ROS shutdown
+            if rospy.is_shutdown():
+                self.preempt()
+                return
+            # Ask sonar to send a single measurement
+            self.conn.send(Message.SINGLE_MEASURE)
+
+            # Get the scan data
+
+        def get(self, message = None, wait = 2):
+            """
+            Sends command and returns reply
+            :param message: Message to expect
+            :param wait: Seconds to wait until received
+            :return:
+            """
+            # Verify if sonar is initialized
+            if not self.initialized:
+                raise SonarNotConfigured
+
+            expected_name = Message.to_string(message)
+            if message:
+                rospy.logdebug("Waiting for % message", expected_name)
+
+            # Determine end time
+            end = datetime.datetime.now() + datetime.timedelta(seconds=wait)
+
+            # Wait until received if a specific message ID is requested, otherwise wait forever
+            while message is None or datetime.datetime.now() < end:
+                try:
+                    reply = self.conn.get_reply()
+
+                    if message is None:
+                        return reply
+                    # Verify reply ID if requested
+                    if reply.id == message:
+                        rospy.logdebug("Found %s message", expected_name)
+                        return reply
+                    else
+                        rospy.logwarn("Received unexpected %s message", reply.name)
+                except PacketCorrupted, serial.SerialException:
+                    # Keep trying
+                    continue
+            # Timeout
+            rospy.logerr("Timed out before receiving message: %s", expected_name)
+            raise TimeoutError()
+
+    def preempt(self):
+        """
+        Preempts a scan in progress
+        :return:
+        """
+        rospy.logwarn("Preempting scan...")
+        self.preempted = True
 
 
 if __name__ == "__main__":
