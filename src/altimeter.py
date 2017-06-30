@@ -339,44 +339,59 @@ class VA500(object):
             self.conn.send(Message.SINGLE_MEASURE)
 
             # Get the scan data
+            try:
+                data = self.get(None,wait = 1).payload
+                timeout_count = 0
+            except TimeoutError:
+                timeout_count += 1
+                rospy.logdebug("Timeout count: %d", timeout_count)
+                if timeout_count >= MAX_TIMEOUT_COUNT:
+                    # Try to resend paramenters
+                    self.conn.send(Message.SINGLE_MEASURE)
+                    timeout_count = 0
+                # Try again
+                continue
+        # Publish extracted data in personalised msg
 
-        def get(self, message = None, wait = 2):
-            """
-            Sends command and returns reply
-            :param message: Message to expect
-            :param wait: Seconds to wait until received
-            :return:
-            """
-            # Verify if sonar is initialized
-            if not self.initialized:
-                raise SonarNotConfigured
 
-            expected_name = Message.to_string(message)
-            if message:
-                rospy.logdebug("Waiting for % message", expected_name)
 
-            # Determine end time
-            end = datetime.datetime.now() + datetime.timedelta(seconds=wait)
+    def get(self, message = None, wait = 2):
+        """
+        Sends command and returns reply
+        :param message: Message to expect
+        :param wait: Seconds to wait until received
+        :return:
+        """
+        # Verify if sonar is initialized
+        if not self.initialized:
+            raise SonarNotConfigured
 
-            # Wait until received if a specific message ID is requested, otherwise wait forever
-            while message is None or datetime.datetime.now() < end:
-                try:
-                    reply = self.conn.get_reply()
+        expected_name = Message.to_string(message)
+        if message:
+            rospy.logdebug("Waiting for % message", expected_name)
 
-                    if message is None:
-                        return reply
-                    # Verify reply ID if requested
-                    if reply.id == message:
-                        rospy.logdebug("Found %s message", expected_name)
-                        return reply
-                    else
-                        rospy.logwarn("Received unexpected %s message", reply.name)
-                except PacketCorrupted, serial.SerialException:
-                    # Keep trying
-                    continue
-            # Timeout
-            rospy.logerr("Timed out before receiving message: %s", expected_name)
-            raise TimeoutError()
+        # Determine end time
+        end = datetime.datetime.now() + datetime.timedelta(seconds=wait)
+
+        # Wait until received if a specific message ID is requested, otherwise wait forever
+        while message is None or datetime.datetime.now() < end:
+            try:
+                reply = self.conn.get_reply()
+
+                if message is None:
+                    return reply
+                # Verify reply ID if requested
+                if reply.id == message:
+                    rospy.logdebug("Found %s message", expected_name)
+                    return reply
+                else
+                    rospy.logwarn("Received unexpected %s message", reply.name)
+            except PacketCorrupted, serial.SerialException:
+                # Keep trying
+                continue
+        # Timeout
+        rospy.logerr("Timed out before receiving message: %s", expected_name)
+        raise TimeoutError()
 
     def preempt(self):
         """
