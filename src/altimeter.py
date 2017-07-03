@@ -7,6 +7,7 @@ import bitstring
 import binascii
 import select
 import datetime
+from valeport_altimeter.msg import Valeport_Altimeter
 
 
 class SonarNotFound(Exception):
@@ -57,6 +58,7 @@ class Message(object):
 
     # Sampling regime
     SINGLE_MEASURE = 'S'
+    SINGLE_MEASURE_RECEIVED = 172 # o eso creo
     MEASURE = 'M'
     SET_MEASURE_MODE = 39
     OPERATING_MODE = 40
@@ -126,7 +128,7 @@ class Reply(object):
         try:
             # Parse message header
             self.bitstream.bytepos = 0
-            rospy.logdebug("parsing message")
+
             if self.bitstream.endswith("\n"):
                 header = self.bitstream.read("uint:8")
             else:
@@ -137,10 +139,14 @@ class Reply(object):
 
             self.bitstream.bytepos = 1
             self.id = self.bitstream.read("uint:8")
-            print self.id
+
+            rospy.logdebug("Parsing message %s", Message.to_string(self.id))
 
             self.bitstream.bytepos = 2
-            self.payload = self.bitstream.read("uint:8")
+
+            self.payload = self.bitstream.read("bins:1")
+
+            rospy.logdebug("%s message has payload %s",Message.to_string(self.id),self.payload)
 
         except ValueError as e:
             raise PacketCorrupted("Unexpected error", e)
@@ -238,7 +244,7 @@ class Socket(object):
             packet = bitstring.BitStream("0x23")
 
             while True:
-                current_line = self.conn.readline()
+                current_line = self.conn.read()
                 for char in current_line:
                     packet.append("0x{:02X}".format(ord(char)))
 
@@ -247,6 +253,7 @@ class Socket(object):
                     reply = Reply(packet)
                     break
                 except PacketIncomplete:
+                    rospy.logdebug("Received packet incomplete")
                     # Keep looking
                     continue
 
@@ -309,8 +316,10 @@ class VA500(object):
         rospy.loginfo("Initializing sonar altimeter on %s", self.port)
         self.initialized = True
 
-        self.conn.send(Message.TRANSDUCER_FREQ)
-        self.conn.get_reply()
+        self.scan()
+
+        #self.conn.send(Message.TRANSDUCER_FREQ)
+        #self.conn.get_reply()
 
 
     def close(self):
@@ -330,7 +339,7 @@ class VA500(object):
 
         # Scan until stopped
         self.preempted = False
-        while not self.preempted
+        while not self.preempted:
             # Preempt on ROS shutdown
             if rospy.is_shutdown():
                 self.preempt()
@@ -340,7 +349,7 @@ class VA500(object):
 
             # Get the scan data
             try:
-                data = self.get(None,wait = 1).payload
+                data = self.get(Message.SINGLE_MEASURE_RECEIVED,wait = 1).payload
                 timeout_count = 0
             except TimeoutError:
                 timeout_count += 1
@@ -352,6 +361,8 @@ class VA500(object):
                 # Try again
                 continue
         # Publish extracted data in personalised msg
+        print 'data:'
+        print data
 
 
 
@@ -368,7 +379,9 @@ class VA500(object):
 
         expected_name = Message.to_string(message)
         if message:
-            rospy.logdebug("Waiting for % message", expected_name)
+            rospy.logdebug("Waiting for %s message", expected_name)
+        else:
+            rospy.logdebug("Waiting for unlabeled message")
 
         # Determine end time
         end = datetime.datetime.now() + datetime.timedelta(seconds=wait)
@@ -384,7 +397,7 @@ class VA500(object):
                 if reply.id == message:
                     rospy.logdebug("Found %s message", expected_name)
                     return reply
-                else
+                else:
                     rospy.logwarn("Received unexpected %s message", reply.name)
             except PacketCorrupted, serial.SerialException:
                 # Keep trying
