@@ -165,7 +165,7 @@ class Command(object):
         :param payload:
         """
         if type(id) == str:
-            self.id = bin(int(binascii.hexlify(id),8))
+            self.id = bin(ord(id))
         else:
             self.id = id
 
@@ -345,18 +345,18 @@ class VA500(object):
                 self.preempt()
                 return
             # Ask sonar to send a single measurement
-            self.conn.send(Message.SINGLE_MEASURE)
+            self.conn.send(Message.MEASURE)
 
             # Get the scan data
             try:
-                data = self.get(Message.SINGLE_MEASURE_RECEIVED,wait = 1).payload
+                data = self.get(None,wait = 1).payload
                 timeout_count = 0
             except TimeoutError:
                 timeout_count += 1
                 rospy.logdebug("Timeout count: %d", timeout_count)
                 if timeout_count >= MAX_TIMEOUT_COUNT:
                     # Try to resend paramenters
-                    self.conn.send(Message.SINGLE_MEASURE)
+                    self.conn.send(Message.MEASURE)
                     timeout_count = 0
                 # Try again
                 continue
