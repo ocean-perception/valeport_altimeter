@@ -14,6 +14,10 @@ class SonarNotFound(Exception):
     """Sonar port could not be found."""
     pass
 
+class DataNotSent(Exception):
+    """Sonar is not sending information."""
+    pass
+
 class PacketIncomplete(Exception):
     """Packet is incomplete."""
     pass
@@ -35,6 +39,7 @@ class Message(object):
     Enumeration of available messages
 
     """
+
     # Instrument settings
     SW_VERSION = 32
     UNIT_SERIAL_NUM = 34
@@ -58,8 +63,11 @@ class Message(object):
 
     # Sampling regime
     SINGLE_MEASURE = 'S'
-    SINGLE_MEASURE_RECEIVED = 172 # o eso creo
+    DATA = '$' # o eso creo
     MEASURE = 'M'
+    CONFIGURE = '#'
+    READY_2_CONFIGURE = '>'
+    MEASURE_RECEIVED = 154 #o eso creo
     SET_MEASURE_MODE = 39
     OPERATING_MODE = 40
     RUN = 28
@@ -108,16 +116,17 @@ class Reply(object):
     """
     Parses and verifies reply packages
     """
-    def __init__(self, bitstream):
+    def __init__(self, bitstream, id = 0):
         """
 
         :param bitstream:
         """
         self.bitstream = bitstream
-        self.id = 0
+        self.id = id
         self.name = "<unknown>"
         self.payload = None
-
+        self.dataformat = 'NMEA'
+        self.dataunits = None
         self.parse()
 
     def parse(self):
@@ -131,20 +140,28 @@ class Reply(object):
 
             if self.bitstream.endswith("\n"):
                 header = self.bitstream.read("uint:8")
+
             else:
                 raise PacketIncomplete("Packet does not end with carriage return")
 
-            if header != 0x23:
-                raise PacketCorrupted("Unexpected header: {}".format(header))
+            if self.bitstream.find('0x 50 52 56 41 54',bytealigned=True): # If 'PRVAT' text in bitstream
+                self.dataformat = 'NMEA'
+            else:
+                self.dataformat = 'TRITECH'
 
-            self.bitstream.bytepos = 1
-            self.id = self.bitstream.read("uint:8")
+            if self.dataformat=='NMEA':
+                # go to first comma
+                self.bitstream.bytepos = self.bitstream.find('0x2C', bytealigned = True)[0]/8 + 1
+                self.payload = self.bitstream.read('bytes:6')
+                #skip comma
+                self.bitstream.read('bytes:1')
+                self.dataunits = self.bitstream.read('bytes:1')
 
-            rospy.logdebug("Parsing message %s", Message.to_string(self.id))
 
-            self.bitstream.bytepos = 2
-
-            self.payload = self.bitstream.read("bins:1")
+            if self.dataformat=='TRITECH':
+                self.bitstream.bytepos = 0
+                self.payload = self.bitstream.read('bytes:6')
+                self.dataunits = self.bitstream.read('bytes:1')
 
             rospy.logdebug("%s message has payload %s",Message.to_string(self.id),self.payload)
 
@@ -178,12 +195,16 @@ class Command(object):
         """
         values = {
             "id": self.id,
-            "payload_length": self.payload.length,
             "payload": self.payload
         }
+        #
+        # serial_format = (
+        #     "0x23, id, 0x3B, bits:payload_length=payload, 0x0D0A"
+        # )
+
 
         serial_format = (
-            "0x23, id, 0x3B, bits:payload_length=payload, 0x0D0A"
+         'id, payload, 0x0D0A'
         )
 
         message = bitstring.pack(serial_format, **values)
@@ -227,7 +248,7 @@ class Socket(object):
         rospy.logdebug("Sending %s: %s", Message.to_string(message), payload)
         self.conn.write(cmd.serialize())
 
-    def get_reply(self):
+    def get_reply(self, expected_reply):
         """
         Waits for and returns reply
         :return:
@@ -235,35 +256,42 @@ class Socket(object):
         try:
             # Wait for the # character
             # Don't put anything in this while, because if losses packets if you do so
-            while not self.conn.read() == "#":
+            while not self.conn.read() == expected_reply:
                 pass
 
-            rospy.logdebug("Received valid packet (starts with '#') ")
+            if expected_reply == '>':
+                rospy.logdebug("Sonar altimeter in configuration mode")
+                return
 
-            # Read one line a t a time until packet complete and parsed
-            packet = bitstring.BitStream("0x23")
+            else:
+                message_id = Message.DATA
+                rospy.logdebug("Received valid packet with sensor data")
 
+            # Initialize empty packet where the received stream will be saved
+            packet = bitstring.BitStream()
+
+            # Convert each caracter from received string stream in the bitstream
             while True:
-                current_line = self.conn.read()
+                current_line = self.conn.readline()
                 for char in current_line:
+                    # This saves what is inside ord(char) in a two digit hex
                     packet.append("0x{:02X}".format(ord(char)))
 
                 # Try to parse
                 try:
-                    reply = Reply(packet)
+                    reply = Reply(packet, id = message_id)
                     break
                 except PacketIncomplete:
                     rospy.logdebug("Received packet incomplete")
                     # Keep looking
                     continue
-
-            rospy.logdebug("Received %s: %s", reply.name, reply.payload)
+                    rospy.logdebug("Received %s: %s", reply.name, reply.payload)
             return reply
 
         except select.error as (code,msg):
-            if code == errno.EINTR:
-                raise KeyboardInterrupt()
-            raise
+             if code == errno.EINTR:
+                 raise KeyboardInterrupt()
+             raise
 
 
 
@@ -283,6 +311,7 @@ class VA500(object):
 
         self.conn = None
         self.initialized = False
+        self.configured = False
 
     def __enter__(self):
         """
@@ -307,6 +336,7 @@ class VA500(object):
         Initializes sonar connection
         :return:
         """
+        # Initialize the port
         if not self.conn:
             try:
                 self.conn = Socket(self.port, self.baudrate)
@@ -316,6 +346,23 @@ class VA500(object):
         rospy.loginfo("Initializing sonar altimeter on %s", self.port)
         self.initialized = True
 
+        # The sonar sends information with previous configuration when it is plugged in,
+        # so it throws exception when no data is received
+
+        try:
+            self.get(Message.DATA)
+
+        except OSError as e:
+            rospy.loginfo("Sonar is not sending data on init. Try reseting it")
+            raise DataNotSent(self.conn, e)
+
+        rospy.loginfo("Preparing sonar to be configured...")
+        self.configure()
+        self.configured = True
+        rospy.loginfo("Sonar ready to be configured")
+
+
+
         self.scan()
 
         #self.conn.send(Message.TRANSDUCER_FREQ)
@@ -324,6 +371,11 @@ class VA500(object):
 
     def close(self):
         self.conn.close()
+
+    def configure(self):
+        self.conn.send(Message.CONFIGURE)
+        rospy.logdebug('%s sent', Message.to_string(Message.CONFIGURE))
+        self.get(Message.READY_2_CONFIGURE)
 
     def scan(self):
         """
@@ -389,13 +441,14 @@ class VA500(object):
         # Wait until received if a specific message ID is requested, otherwise wait forever
         while message is None or datetime.datetime.now() < end:
             try:
-                reply = self.conn.get_reply()
-
                 if message is None:
+                    reply = self.conn.get_reply('#')
                     return reply
+                else:
+                    reply = self.conn.get_reply(message)
                 # Verify reply ID if requested
                 if reply.id == message:
-                    rospy.logdebug("Found %s message", expected_name)
+                    #rospy.logdebug("Found %s message", expected_name)
                     return reply
                 else:
                     rospy.logwarn("Received unexpected %s message", reply.name)
