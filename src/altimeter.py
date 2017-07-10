@@ -63,10 +63,10 @@ class Message(object):
 
     # Sampling regime
     SINGLE_MEASURE = 83 # decimal value of 'S'
-    DATA = 36 # Decimal value of $
+    DATA = '$' #
     MEASURE = 77 # Decimal value of 'M'
     CONFIGURE = 35 # decimal value of #
-    READY_2_CONFIGURE = 62 # Decimal value of '>'
+    READY_2_CONFIGURE = '>'
     MEASURE_RECEIVED = 154 #o eso creo
     SET_MEASURE_MODE = 39
     OPERATING_MODE = 40
@@ -251,7 +251,7 @@ class Socket(object):
         :return:
         """
         try:
-            # Wait for the # character
+            # Wait for the header character
             # Don't put anything in this while, because if losses packets if you do so
             while not self.conn.read() == expected_reply:
                 pass
