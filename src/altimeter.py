@@ -62,11 +62,11 @@ class Message(object):
     ANALOG_RANGE_LIMIT = 98
 
     # Sampling regime
-    SINGLE_MEASURE = 'S'
-    DATA = '$' # o eso creo
-    MEASURE = 'M'
-    CONFIGURE = '#'
-    READY_2_CONFIGURE = '>'
+    SINGLE_MEASURE = 83 # decimal value of 'S'
+    DATA = 36 # Decimal value of $
+    MEASURE = 77 # Decimal value of 'M'
+    CONFIGURE = 35 # decimal value of #
+    READY_2_CONFIGURE = 62 # Decimal value of '>'
     MEASURE_RECEIVED = 154 #o eso creo
     SET_MEASURE_MODE = 39
     OPERATING_MODE = 40
@@ -181,10 +181,8 @@ class Command(object):
         :param id:
         :param payload:
         """
-        if type(id) == str:
-            self.id = bin(ord(id))
-        else:
-            self.id = id
+
+        self.id = id
 
         self.payload = payload if payload else bitstring.BitStream()
 
@@ -193,21 +191,20 @@ class Command(object):
         Construct string of bytes to send to sonar
         :return:
         """
+
         values = {
             "id": self.id,
-            "payload": self.payload
+            "payload": self.payload,
+            "payload_len": len(self.payload)
         }
         #
-        # serial_format = (
-        #     "0x23, id, 0x3B, bits:payload_length=payload, 0x0D0A"
-        # )
-
-
         serial_format = (
-         'id, payload, 0x0D0A'
+            "int:8=id, bits:payload_len=payload, 0x0D0A"
         )
 
         message = bitstring.pack(serial_format, **values)
+
+        rospy.logdebug("Sent command '0x%s'", message.hex)
 
         return message.tobytes()
 
@@ -360,6 +357,7 @@ class VA500(object):
         self.configure()
         self.configured = True
         rospy.loginfo("Sonar ready to be configured")
+        self.conn.send(Message.SW_VERSION)
 
 
 
