@@ -41,7 +41,7 @@ class Message(object):
     """
 
     # Instrument settings
-    SW_VERSION = 32
+    SW_VERSION = 35485150 #032
     UNIT_SERIAL_NUM = 34
     PCB_SERIAL_NUM = 136
     CALIBRATION_DATE = 138
@@ -135,35 +135,39 @@ class Reply(object):
         :return:
         """
         try:
-            # Parse message header
-            self.bitstream.bytepos = 0
-
-            if self.bitstream.endswith("\n"):
-                header = self.bitstream.read("uint:8")
-
-            else:
-                raise PacketIncomplete("Packet does not end with carriage return")
-
-            if self.bitstream.find('0x 50 52 56 41 54',bytealigned=True): # If 'PRVAT' text in bitstream
-                self.dataformat = 'NMEA'
-            else:
-                self.dataformat = 'TRITECH'
-
-            if self.dataformat=='NMEA':
-                # go to first comma
-                self.bitstream.bytepos = self.bitstream.find('0x2C', bytealigned = True)[0]/8 + 1
-                self.payload = self.bitstream.read('bytes:6')
-                #skip comma
-                self.bitstream.read('bytes:1')
-                self.dataunits = self.bitstream.read('bytes:1')
-
-
-            if self.dataformat=='TRITECH':
+            if self.bitstream:
+                # Parse message header
                 self.bitstream.bytepos = 0
-                self.payload = self.bitstream.read('bytes:6')
-                self.dataunits = self.bitstream.read('bytes:1')
 
-            rospy.logdebug("%s message has payload %s",Message.to_string(self.id),self.payload)
+                if self.bitstream.endswith("\n"):
+                    header = self.bitstream.read("uint:8")
+
+                else:
+                    raise PacketIncomplete("Packet does not end with carriage return")
+
+                if self.bitstream.find('0x 50 52 56 41 54',bytealigned=True): # If 'PRVAT' text in bitstream
+                    self.dataformat = 'NMEA'
+                else:
+                    self.dataformat = 'TRITECH'
+
+                if self.dataformat=='NMEA':
+                    # go to first comma
+                    self.bitstream.bytepos = self.bitstream.find('0x2C', bytealigned = True)[0]/8 + 1
+                    self.payload = self.bitstream.read('bytes:6')
+                    #skip comma
+                    self.bitstream.read('bytes:1')
+                    self.dataunits = self.bitstream.read('bytes:1')
+
+
+                if self.dataformat=='TRITECH':
+                    self.bitstream.bytepos = 0
+                    self.payload = self.bitstream.read('bytes:6')
+                    self.dataunits = self.bitstream.read('bytes:1')
+
+                rospy.logdebug("%s message has payload %s",Message.to_string(self.id),self.payload)
+
+            else:
+                pass
 
         except ValueError as e:
             raise PacketCorrupted("Unexpected error", e)
@@ -192,14 +196,22 @@ class Command(object):
         :return:
         """
 
+        # The len must be multiple of 4 bits to convert unambiguously
+
+        id_len = self.id.bit_length()
+
+        while (id_len % 4)!= 0:
+            id_len += 1
+
         values = {
             "id": self.id,
+            "id_len": id_len,
             "payload": self.payload,
             "payload_len": len(self.payload)
         }
-        #
+
         serial_format = (
-            "int:8=id, bits:payload_len=payload, 0x0D0A"
+            "uint:id_len=id, bits:payload_len=payload, 0x0D0A"
         )
 
         message = bitstring.pack(serial_format, **values)
@@ -256,16 +268,18 @@ class Socket(object):
             while not self.conn.read() == expected_reply:
                 pass
 
+            # Initialize empty packet where the received stream will be saved
+            packet = bitstring.BitStream()
+
             if expected_reply == '>':
+                message_id = Message.READY_2_CONFIGURE
                 rospy.logdebug("Sonar altimeter in configuration mode")
-                return
+                reply = Reply(packet.append("0x{:02X}".format(ord('>'))), id=message_id)
+                return reply
 
             else:
                 message_id = Message.DATA
                 rospy.logdebug("Received valid packet with sensor data")
-
-            # Initialize empty packet where the received stream will be saved
-            packet = bitstring.BitStream()
 
             # Convert each caracter from received string stream in the bitstream
             while True:
@@ -273,6 +287,7 @@ class Socket(object):
                 for char in current_line:
                     # This saves what is inside ord(char) in a two digit hex
                     packet.append("0x{:02X}".format(ord(char)))
+                print packet
 
                 # Try to parse
                 try:
@@ -358,9 +373,7 @@ class VA500(object):
         self.configured = True
         rospy.loginfo("Sonar ready to be configured")
         self.conn.send(Message.SW_VERSION)
-
-
-
+        self.get()
         self.scan()
 
         #self.conn.send(Message.TRANSDUCER_FREQ)
