@@ -40,51 +40,52 @@ class Message(object):
 
     """
 
+    CONFIGURATION_PARAM = 0
+
     # Instrument settings
-    SW_VERSION = 35485150 #032
-    UNIT_SERIAL_NUM = 34
-    PCB_SERIAL_NUM = 136
-    CALIBRATION_DATE = 138
-    TRANSDUCER_FREQ = 839
+    SW_VERSION       = 0x23303332 #032
+    UNIT_SERIAL_NUM  = 0x23303334 #034
+    PCB_SERIAL_NUM   = 0x23313336 #136
+    CALIBRATION_DATE = 0x23313338 #138
+    TRANSDUCER_FREQ  = 0x23383339 #839
 
     # Communication settings
-    BAUD_RATE = 59
-    SET_ADDRESS_485 = 1
-    ADDRESS_485 = 2
-    ADDRESS_MODE_CONF = 5
-    ADDRESS_MODE = 6
+    BAUD_RATE         = 0x23303539 #059
+    SET_ADDRESS_485   = 0x23303031 #001
+    ADDRESS_485       = 0x23303032 #002
+    ADDRESS_MODE_CONF = 0x23303035 #005
+    ADDRESS_MODE      = 0x23303036 #006
 
     # Analogue settings
-    SET_VOLTAGE_RANGE = 94
-    VOLTAGE_RANGE = 95
-    ANALOG_OUTPUT_TEST = 96
-    SET_ANALOG_RANGE_LIMIT = 97
-    ANALOG_RANGE_LIMIT = 98
+    SET_VOLTAGE_RANGE       = 0x23303934 #094
+    VOLTAGE_RANGE           = 0x23303935 #095
+    ANALOG_OUTPUT_TEST      = 0x23303936 #096
+    SET_ANALOG_RANGE_LIMIT  = 0x23303937 #097
+    ANALOG_RANGE_LIMIT      = 0x23303938 #098
 
     # Sampling regime
-    SINGLE_MEASURE = 83 # decimal value of 'S'
-    DATA = '$' #
-    MEASURE = 77 # Decimal value of 'M'
-    CONFIGURE = 35 # decimal value of #
-    READY_2_CONFIGURE = '>'
-    MEASURE_RECEIVED = 154 #o eso creo
-    SET_MEASURE_MODE = 39
-    OPERATING_MODE = 40
-    RUN = 28
+    SINGLE_MEASURE      = 0x53 # hex value of 'S'
+    DATA                = '$' #
+    MEASURE             = 0x4D # hex value of 'M'
+    CONFIGURE           = 0x23 # hex value of #
+    READY_2_CONFIGURE   = '>'
+    SET_MEASURE_MODE    = 0x23303339 #039
+    OPERATING_MODE      = 0x23303430 #040
+    RUN                 = 0x23303238 #028
 
     # Output format
-    OUTPUT_FORMAT = 89
-    SET_OUTPUT_FORMAT = 82
+    OUTPUT_FORMAT       = 0x23303238 #089
+    SET_OUTPUT_FORMAT   = 0x23303832 #082
 
     # Range settings
-    SET_RANGE_UNITS = 21
-    RANGE_UNITS = 22
-    SET_ERROR_MSG = 118
-    ERROR_MSG = 119
-    MAX_RANGE = 823
-    MINIMUM_RANGE = 841
-    CHANGE_SOUND_SPEED = 830
-    SOUND_SPEED = 831
+    SET_RANGE_UNITS     = 0x23303231 #021
+    RANGE_UNITS         = 0x23303232 #022
+    SET_ERROR_MSG       = 0x23313138 #118
+    ERROR_MSG           = 0x23313139 #119
+    MAX_RANGE           = 0x23383233 #823
+    MINIMUM_RANGE       = 0x23383431 #841
+    CHANGE_SOUND_SPEED  = 0x23383330 #830
+    SOUND_SPEED         = 0x23383331 #831
 
     @classmethod
     def to_string(cls,id):
@@ -257,7 +258,7 @@ class Socket(object):
         rospy.logdebug("Sending %s: %s", Message.to_string(message), payload)
         self.conn.write(cmd.serialize())
 
-    def get_reply(self, expected_reply):
+    def get_reply(self, expected_reply = None):
         """
         Waits for and returns reply
         :return:
@@ -265,8 +266,14 @@ class Socket(object):
         try:
             # Wait for the header character
             # Don't put anything in this while, because if losses packets if you do so
-            while not self.conn.read() == expected_reply:
-                pass
+            if expected_reply:
+                print 'expected_reply'
+                while not self.conn.read() == expected_reply:
+                    pass
+            else:
+                print 'no expected reply'
+                while self.conn.read() == None:
+                    pass
 
             # Initialize empty packet where the received stream will be saved
             packet = bitstring.BitStream()
@@ -277,9 +284,11 @@ class Socket(object):
                 reply = Reply(packet.append("0x{:02X}".format(ord('>'))), id=message_id)
                 return reply
 
-            else:
+            elif expected_reply == '$':
                 message_id = Message.DATA
                 rospy.logdebug("Received valid packet with sensor data")
+            else:
+                message_id = Message.CONFIGURATION_PARAM
 
             # Convert each caracter from received string stream in the bitstream
             while True:
@@ -453,7 +462,7 @@ class VA500(object):
         while message is None or datetime.datetime.now() < end:
             try:
                 if message is None:
-                    reply = self.conn.get_reply('#')
+                    reply = self.conn.get_reply()
                     return reply
                 else:
                     reply = self.conn.get_reply(message)
