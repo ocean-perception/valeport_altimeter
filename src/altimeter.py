@@ -124,10 +124,11 @@ class Reply(object):
         """
         self.bitstream = bitstream
         self.id = id
-        self.name = "<unknown>"
+        self.name = Message.to_string(self.id)
         self.payload = None
         self.dataformat = 'NMEA'
         self.dataunits = None
+
         self.parse()
 
     def parse(self):
@@ -141,7 +142,7 @@ class Reply(object):
                 self.bitstream.bytepos = 0
 
                 if self.bitstream.endswith("\n"):
-                    header = self.bitstream.read("uint:8")
+                    pass
 
                 else:
                     raise PacketIncomplete("Packet does not end with carriage return")
@@ -165,9 +166,9 @@ class Reply(object):
                     self.payload = self.bitstream.read('bytes:6')
                     self.dataunits = self.bitstream.read('bytes:1')
                 else:
-                    self.payload = self.bitstream.read('bits:len(self.bitstream)')
-
-                rospy.logdebug("%s message has payload %s",Message.to_string(self.id),self.payload)
+                    self.bitstream.bytepos = 0
+                    length_string = 'bin:'+ str(len(self.bitstream))
+                    self.payload = self.bitstream.read(length_string)
 
             else:
                 pass
@@ -267,7 +268,7 @@ class Socket(object):
         """
         self.conn.close()
 
-    def send(self, message, payload = None):
+    def send(self, message, payload = None, command = None):
         """
 
         :param message:
@@ -315,7 +316,6 @@ class Socket(object):
                 for char in current_line:
                     # This saves what is inside ord(char) in a two digit hex
                     packet.append("0x{:02X}".format(ord(char)))
-                print packet
 
                 # Try to parse
                 try:
@@ -325,13 +325,14 @@ class Socket(object):
                     rospy.logdebug("Received packet incomplete")
                     # Keep looking
                     continue
-                    rospy.logdebug("Received %s: %s", reply.name, reply.payload)
-            return reply
 
         except select.error as (code,msg):
              if code == errno.EINTR:
                  raise KeyboardInterrupt()
              raise
+
+        rospy.logdebug("Received %s: %s", reply.name, reply.payload)
+        return reply
 
 
 
@@ -400,7 +401,9 @@ class VA500(object):
         self.configure()
         self.configured = True
         rospy.loginfo("Sonar ready to be configured")
-        self.conn.send(Message.UNIT_SERIAL_NUM)
+        self.conn.send(Message.OUTPUT_FORMAT)
+        self.get()
+        rospy.loginfo("Sonar received configuration param")
         self.get()
         self.scan()
 
@@ -436,11 +439,11 @@ class VA500(object):
                 self.preempt()
                 return
             # Ask sonar to send a single measurement
-            self.conn.send(Message.MEASURE)
+            self.conn.send(Message.SINGLE_MEASURE)
 
             # Get the scan data
             try:
-                data = self.get(None,wait = 1).payload
+                data = self.get(Message.DATA,wait = 1).payload
                 timeout_count = 0
             except TimeoutError:
                 timeout_count += 1
@@ -451,9 +454,9 @@ class VA500(object):
                     timeout_count = 0
                 # Try again
                 continue
-        # Publish extracted data in personalised msg
-        print 'data:'
-        print data
+            # Publish extracted data in personalised msg
+            print 'data:'
+            print data
 
 
 
