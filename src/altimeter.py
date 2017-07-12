@@ -43,25 +43,25 @@ class Message(object):
     CONFIGURATION_PARAM = 0
 
     # Instrument settings
-    SW_VERSION       = 0x23303332 #032
-    UNIT_SERIAL_NUM  = 0x23303334 #034
-    PCB_SERIAL_NUM   = 0x23313336 #136
-    CALIBRATION_DATE = 0x23313338 #138
-    TRANSDUCER_FREQ  = 0x23383339 #839
+    SW_VERSION       = 0x303332 # 032
+    UNIT_SERIAL_NUM  = 0x303334 # 034
+    PCB_SERIAL_NUM   = 0x313336 # 136
+    CALIBRATION_DATE = 0x313338 # 138
+    TRANSDUCER_FREQ  = 0x383339 # 839
 
     # Communication settings
-    BAUD_RATE         = 0x23303539 #059
-    SET_ADDRESS_485   = 0x23303031 #001
-    ADDRESS_485       = 0x23303032 #002
-    ADDRESS_MODE_CONF = 0x23303035 #005
-    ADDRESS_MODE      = 0x23303036 #006
+    BAUD_RATE         = 0x303539 # 059
+    SET_ADDRESS_485   = 0x303031 # 001
+    ADDRESS_485       = 0x303032 # 002
+    ADDRESS_MODE_CONF = 0x303035 # 005
+    ADDRESS_MODE      = 0x303036 # 006
 
     # Analogue settings
-    SET_VOLTAGE_RANGE       = 0x23303934 #094
-    VOLTAGE_RANGE           = 0x23303935 #095
-    ANALOG_OUTPUT_TEST      = 0x23303936 #096
-    SET_ANALOG_RANGE_LIMIT  = 0x23303937 #097
-    ANALOG_RANGE_LIMIT      = 0x23303938 #098
+    SET_VOLTAGE_RANGE       = 0x303934 # 094
+    VOLTAGE_RANGE           = 0x303935 # 095
+    ANALOG_OUTPUT_TEST      = 0x303936 # 096
+    SET_ANALOG_RANGE_LIMIT  = 0x303937 # 097
+    ANALOG_RANGE_LIMIT      = 0x303938 # 098
 
     # Sampling regime
     SINGLE_MEASURE      = 0x53 # hex value of 'S'
@@ -69,23 +69,23 @@ class Message(object):
     MEASURE             = 0x4D # hex value of 'M'
     CONFIGURE           = 0x23 # hex value of #
     READY_2_CONFIGURE   = '>'
-    SET_MEASURE_MODE    = 0x23303339 #039
-    OPERATING_MODE      = 0x23303430 #040
-    RUN                 = 0x23303238 #028
+    SET_MEASURE_MODE    = 0x303339 # 039
+    OPERATING_MODE      = 0x303430 # 040
+    RUN                 = 0x303238 # 028
 
     # Output format
-    OUTPUT_FORMAT       = 0x23303238 #089
-    SET_OUTPUT_FORMAT   = 0x23303832 #082
+    OUTPUT_FORMAT       = 0x303238 # 089
+    SET_OUTPUT_FORMAT   = 0x303832 # 082
 
     # Range settings
-    SET_RANGE_UNITS     = 0x23303231 #021
-    RANGE_UNITS         = 0x23303232 #022
-    SET_ERROR_MSG       = 0x23313138 #118
-    ERROR_MSG           = 0x23313139 #119
-    MAX_RANGE           = 0x23383233 #823
-    MINIMUM_RANGE       = 0x23383431 #841
-    CHANGE_SOUND_SPEED  = 0x23383330 #830
-    SOUND_SPEED         = 0x23383331 #831
+    SET_RANGE_UNITS     = 0x303231 # 021
+    RANGE_UNITS         = 0x303232 # 022
+    SET_ERROR_MSG       = 0x313138 # 118
+    ERROR_MSG           = 0x313139 # 119
+    MAX_RANGE           = 0x383233 # 823
+    MINIMUM_RANGE       = 0x383431 # 841
+    CHANGE_SOUND_SPEED  = 0x383330 # 830
+    SOUND_SPEED         = 0x383331 # 831
 
     @classmethod
     def to_string(cls,id):
@@ -151,7 +151,7 @@ class Reply(object):
                 else:
                     self.dataformat = 'TRITECH'
 
-                if self.dataformat=='NMEA':
+                if self.dataformat=='NMEA' and self.id != Message.CONFIGURATION_PARAM:
                     # go to first comma
                     self.bitstream.bytepos = self.bitstream.find('0x2C', bytealigned = True)[0]/8 + 1
                     self.payload = self.bitstream.read('bytes:6')
@@ -160,10 +160,12 @@ class Reply(object):
                     self.dataunits = self.bitstream.read('bytes:1')
 
 
-                if self.dataformat=='TRITECH':
+                elif self.dataformat=='TRITECH' and self.id != Message.CONFIGURATION_PARAM:
                     self.bitstream.bytepos = 0
                     self.payload = self.bitstream.read('bytes:6')
                     self.dataunits = self.bitstream.read('bytes:1')
+                else:
+                    self.payload = self.bitstream.read('bits:len(self.bitstream)')
 
                 rospy.logdebug("%s message has payload %s",Message.to_string(self.id),self.payload)
 
@@ -180,7 +182,7 @@ class Command(object):
     """
     Sonar commands
     """
-    def __init__(self, id, payload = None):
+    def __init__(self, id, payload = None, command = None):
         """
         Construct command object
         :param id:
@@ -191,6 +193,8 @@ class Command(object):
 
         self.payload = payload if payload else bitstring.BitStream()
 
+        self.command = command if command else bitstring.BitStream()
+
     def serialize(self):
         """
         Construct string of bytes to send to sonar
@@ -200,20 +204,36 @@ class Command(object):
         # The len must be multiple of 4 bits to convert unambiguously
 
         id_len = self.id.bit_length()
-
         while (id_len % 4)!= 0:
             id_len += 1
+        if self.payload:
+            pay_len = self.payload.bit_length()
+            while (pay_len % 4)!= 0:
+                pay_len += 1
+        else: pay_len = 0
+        if self.command:
+            com_len = self.command.bit_length()
+            while (com_len % 4)!= 0:
+                com_len += 1
+        else: com_len = 0
 
         values = {
             "id": self.id,
             "id_len": id_len,
             "payload": self.payload,
-            "payload_len": len(self.payload)
+            "payload_len": pay_len,
+            "command": self.command,
+            "command_len": com_len
         }
 
-        serial_format = (
-            "uint:id_len=id, bits:payload_len=payload, 0x0D0A"
-        )
+        if self.id == Message.MEASURE or self.id == Message.SINGLE_MEASURE:
+            serial_format = (
+                "uint:id_len=id, bits:payload_len=payload, bits:command_len = command, 0x0D0A"
+            )
+        else:
+            serial_format = (
+                "0x23, uint:id_len=id, bits:payload_len=payload, bits:command_len = command, 0x0D0A"
+            )
 
         message = bitstring.pack(serial_format, **values)
 
@@ -267,12 +287,10 @@ class Socket(object):
             # Wait for the header character
             # Don't put anything in this while, because if losses packets if you do so
             if expected_reply:
-                print 'expected_reply'
                 while not self.conn.read() == expected_reply:
                     pass
             else:
-                print 'no expected reply'
-                while self.conn.read() == None:
+                while self.conn.read() == '':
                     pass
 
             # Initialize empty packet where the received stream will be saved
@@ -288,6 +306,7 @@ class Socket(object):
                 message_id = Message.DATA
                 rospy.logdebug("Received valid packet with sensor data")
             else:
+                rospy.logdebug("Received packet with configuration parameters")
                 message_id = Message.CONFIGURATION_PARAM
 
             # Convert each caracter from received string stream in the bitstream
@@ -381,7 +400,7 @@ class VA500(object):
         self.configure()
         self.configured = True
         rospy.loginfo("Sonar ready to be configured")
-        self.conn.send(Message.SW_VERSION)
+        self.conn.send(Message.UNIT_SERIAL_NUM)
         self.get()
         self.scan()
 
