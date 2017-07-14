@@ -270,7 +270,6 @@ class Socket(object):
 
     def send(self, message, payload = None, command = None):
         """
-
         :param message:
         :param payload:
         :return:
@@ -405,10 +404,10 @@ class VA500(object):
         self.get()
         rospy.loginfo("Sonar received configuration param")
         self.get()
+        self.conn.send(payload=Message.SET_OUTPUT_FORMAT)
         self.scan()
 
-        #self.conn.send(Message.TRANSDUCER_FREQ)
-        #self.conn.get_reply()
+
 
 
     def close(self):
@@ -455,8 +454,8 @@ class VA500(object):
                 # Try again
                 continue
             # Publish extracted data in personalised msg
-            print 'data:'
-            print data
+            pub = rospy.Publisher('valeport_altimeter', Valeport_Altimeter)
+            pub.publish(distance = float(data))
 
 
 
