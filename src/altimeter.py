@@ -392,7 +392,7 @@ class VA500(object):
         try:
             self.configure()
         except:
-            print 'ips'
+            raise SonarNotConfigured()
         self.configured = True
         rospy.loginfo("Sonar ready to be configured")
         self.conn.send(Message.MAX_RANGE)
