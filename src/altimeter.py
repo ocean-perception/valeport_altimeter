@@ -351,6 +351,10 @@ class VA500(object):
         self.initialized = False
         self.configured = False
 
+        self.range = 0
+        self.max_range = 0
+        self.min_range = 0
+
     def __enter__(self):
         """
         Initializes for first use
@@ -384,25 +388,21 @@ class VA500(object):
         rospy.loginfo("Initializing sonar altimeter on %s", self.port)
         self.initialized = True
 
-        # The sonar sends information with previous configuration when it is plugged in,
-        # so it throws exception when no data is received
-
-        try:
-            self.get(Message.DATA)
-
-        except OSError as e:
-            rospy.loginfo("Sonar is not sending data on init. Try reseting it")
-            raise DataNotSent(self.conn, e)
-
         rospy.loginfo("Preparing sonar to be configured...")
-        self.configure()
+        try:
+            self.configure()
+        except:
+            print 'ips'
         self.configured = True
         rospy.loginfo("Sonar ready to be configured")
         self.conn.send(Message.MAX_RANGE)
         self.get()
-        rospy.loginfo("Sonar received configuration param")
-        print self.get().payload
-        #self.conn.send(Message.SET_RANGE_UNITS, command=0x3b31)
+        self.max_range = float(self.get().payload)
+
+        self.conn.send(Message.MINIMUM_RANGE)
+        self.get()
+        self.min_range = float(self.get().payload)
+        rospy.loginfo("Sonar received configuration params")
         self.scan()
 
 
@@ -410,6 +410,8 @@ class VA500(object):
         self.conn.close()
 
     def configure(self):
+        self.conn.send(Message.MEASURE)
+        self.get(Message.DATA)
         self.conn.send(Message.CONFIGURE)
         rospy.logdebug('%s sent', Message.to_string(Message.CONFIGURE))
         self.get(Message.READY_2_CONFIGURE)
@@ -439,6 +441,7 @@ class VA500(object):
             # Get the scan data
             try:
                 data = self.get(Message.DATA,wait = 1).payload
+                self.range = float(data)
                 timeout_count = 0
             except TimeoutError:
                 timeout_count += 1
@@ -452,9 +455,10 @@ class VA500(object):
             # Publish extracted data in personalised msg
             pub2 = rospy.Publisher('range',Range, queue_size=10)
             try:
-                pub2.publish(range = float(data))
+                pub2.publish(range = self.range, min_range = self.min_range, max_range = self.max_range)
             except:
                 pass
+
 
 
 
@@ -480,21 +484,23 @@ class VA500(object):
 
         # Wait until received if a specific message ID is requested, otherwise wait forever
         while message is None or datetime.datetime.now() < end:
-            try:
-                if message is None:
+            if message is None:
+                try:
                     reply = self.conn.get_reply()
                     return reply
-                else:
+                except:
+                    break
+            else:
+                try:
                     reply = self.conn.get_reply(message)
+                except:
+                    break
                 # Verify reply ID if requested
-                if reply.id == message:
-                    #rospy.logdebug("Found %s message", expected_name)
-                    return reply
-                else:
-                    rospy.logwarn("Received unexpected %s message", reply.name)
-            except PacketCorrupted, serial.SerialException:
-                # Keep trying
-                continue
+            if reply.id == message:
+                #rospy.logdebug("Found %s message", expected_name)
+                return reply
+            else:
+                rospy.logwarn("Received unexpected %s message", reply.name)
         # Timeout
         rospy.logerr("Timed out before receiving message: %s", expected_name)
         raise TimeoutError()
