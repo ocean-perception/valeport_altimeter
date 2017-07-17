@@ -7,7 +7,7 @@ import bitstring
 import binascii
 import select
 import datetime
-from valeport_altimeter.msg import Valeport_Altimeter
+from sensor_msgs.msg import Range
 
 
 class SonarNotFound(Exception):
@@ -214,8 +214,10 @@ class Command(object):
         else: pay_len = 0
         if self.command:
             com_len = self.command.bit_length()
+            print com_len
             while (com_len % 4)!= 0:
                 com_len += 1
+            print com_len
         else: com_len = 0
 
         values = {
@@ -226,6 +228,8 @@ class Command(object):
             "command": self.command,
             "command_len": com_len
         }
+
+        print values
 
         if self.id == Message.MEASURE or self.id == Message.SINGLE_MEASURE:
             serial_format = (
@@ -274,8 +278,8 @@ class Socket(object):
         :param payload:
         :return:
         """
-        cmd = Command(message, payload)
-        rospy.logdebug("Sending %s: %s", Message.to_string(message), payload)
+        cmd = Command(message, payload,command)
+        rospy.logdebug("Sending %s: %s", Message.to_string(message), command)
         self.conn.write(cmd.serialize())
 
     def get_reply(self, expected_reply = None):
@@ -404,7 +408,7 @@ class VA500(object):
         self.get()
         rospy.loginfo("Sonar received configuration param")
         self.get()
-        self.conn.send(payload=Message.SET_OUTPUT_FORMAT)
+        #self.conn.send(Message.SET_RANGE_UNITS, command=0x3b31)
         self.scan()
 
 
@@ -454,8 +458,8 @@ class VA500(object):
                 # Try again
                 continue
             # Publish extracted data in personalised msg
-            pub = rospy.Publisher('valeport_altimeter', Valeport_Altimeter)
-            pub.publish(distance = float(data))
+            pub2 = rospy.Publisher('range',Range)
+            pub2.publish(range = float(data))
 
 
 
