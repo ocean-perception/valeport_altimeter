@@ -167,7 +167,7 @@ class Reply(object):
                     self.dataunits = self.bitstream.read('bytes:1')
                 else:
                     self.bitstream.bytepos = 0
-                    length_string = 'bin:'+ str(len(self.bitstream))
+                    length_string = 'bytes:'+ str(len(self.bitstream)/8)
                     self.payload = self.bitstream.read(length_string)
 
             else:
