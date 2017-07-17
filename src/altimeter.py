@@ -82,7 +82,7 @@ class Message(object):
     RANGE_UNITS         = 0x303232 # 022
     SET_ERROR_MSG       = 0x313138 # 118
     ERROR_MSG           = 0x313139 # 119
-    MAX_RANGE           = 0x383233 # 823
+    MAX_RANGE           = 0x383234 # 824
     MINIMUM_RANGE       = 0x383431 # 841
     CHANGE_SOUND_SPEED  = 0x383330 # 830
     SOUND_SPEED         = 0x383331 # 831
@@ -214,10 +214,8 @@ class Command(object):
         else: pay_len = 0
         if self.command:
             com_len = self.command.bit_length()
-            print com_len
             while (com_len % 4)!= 0:
                 com_len += 1
-            print com_len
         else: com_len = 0
 
         values = {
@@ -229,7 +227,6 @@ class Command(object):
             "command_len": com_len
         }
 
-        print values
 
         if self.id == Message.MEASURE or self.id == Message.SINGLE_MEASURE:
             serial_format = (
@@ -292,9 +289,6 @@ class Socket(object):
             # Don't put anything in this while, because if losses packets if you do so
             if expected_reply:
                 while not self.conn.read() == expected_reply:
-                    pass
-            else:
-                while self.conn.read() == '':
                     pass
 
             # Initialize empty packet where the received stream will be saved
@@ -404,14 +398,12 @@ class VA500(object):
         self.configure()
         self.configured = True
         rospy.loginfo("Sonar ready to be configured")
-        self.conn.send(Message.OUTPUT_FORMAT)
+        self.conn.send(Message.MAX_RANGE)
         self.get()
         rospy.loginfo("Sonar received configuration param")
-        self.get()
+        print self.get().payload
         #self.conn.send(Message.SET_RANGE_UNITS, command=0x3b31)
         self.scan()
-
-
 
 
     def close(self):
@@ -458,8 +450,11 @@ class VA500(object):
                 # Try again
                 continue
             # Publish extracted data in personalised msg
-            pub2 = rospy.Publisher('range',Range)
-            pub2.publish(range = float(data))
+            pub2 = rospy.Publisher('range',Range, queue_size=10)
+            try:
+                pub2.publish(range = float(data))
+            except:
+                pass
 
 
 
