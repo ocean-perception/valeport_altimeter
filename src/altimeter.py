@@ -338,7 +338,7 @@ class VA500(object):
     """
     *VA500* class for sonar altimeter
     """
-    def __init__(self, port="/dev/serial", baudrate = 115200):
+    def __init__(self, port="/dev/ttyUSB0", baudrate = 115200):
         """
 
         :param port:
@@ -388,21 +388,21 @@ class VA500(object):
         rospy.loginfo("Initializing sonar altimeter on %s", self.port)
         self.initialized = True
 
-        rospy.loginfo("Preparing sonar to be configured...")
-        try:
-            self.configure()
-        except:
-            raise SonarNotConfigured()
-        self.configured = True
-        rospy.loginfo("Sonar ready to be configured")
-        self.conn.send(Message.MAX_RANGE)
-        self.get()
-        self.max_range = float(self.get().payload)
-
-        self.conn.send(Message.MINIMUM_RANGE)
-        self.get()
-        self.min_range = float(self.get().payload)
-        rospy.loginfo("Sonar received configuration params")
+        # rospy.loginfo("Preparing sonar to be configured...")
+        # try:
+        #     self.configure()
+        # except:
+        #     raise SonarNotConfigured()
+        # self.configured = True
+        # rospy.loginfo("Sonar ready to be configured")
+        # self.conn.send(Message.MAX_RANGE)
+        # self.get()
+        # self.max_range = float(self.get().payload)
+        #
+        # self.conn.send(Message.MINIMUM_RANGE)
+        # self.get()
+        # self.min_range = float(self.get().payload)
+        # rospy.loginfo("Sonar received configuration params")
         self.scan()
 
 
@@ -410,8 +410,8 @@ class VA500(object):
         self.conn.close()
 
     def configure(self):
-        self.conn.send(Message.MEASURE)
-        self.get(Message.DATA)
+        #self.conn.send(Message.MEASURE)
+        #self.get(Message.DATA)
         self.conn.send(Message.CONFIGURE)
         rospy.logdebug('%s sent', Message.to_string(Message.CONFIGURE))
         self.get(Message.READY_2_CONFIGURE)
@@ -436,7 +436,7 @@ class VA500(object):
                 self.preempt()
                 return
             # Ask sonar to send a single measurement
-            self.conn.send(Message.SINGLE_MEASURE)
+            self.conn.send(Message.MEASURE)
 
             # Get the scan data
             try:
