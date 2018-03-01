@@ -9,6 +9,10 @@ import select
 import datetime
 from sensor_msgs.msg import Range
 
+from dynamic_reconfigure.server import Server
+from valeport_altimeter.cfg import ScanConfig
+
+
 
 class SonarNotFound(Exception):
     """Sonar port could not be found."""
@@ -355,6 +359,12 @@ class VA500(object):
         self.max_range = 0
         self.min_range = 0
 
+        # Initialize parameters (just in case...)
+        self.port_enabled = False
+        self.port_baudrate = 115200
+
+        Server(ScanConfig,self.cfg_callback)
+
     def __enter__(self):
         """
         Initializes for first use
@@ -403,11 +413,34 @@ class VA500(object):
         # self.get()
         # self.min_range = float(self.get().payload)
         # rospy.loginfo("Sonar received configuration params")
-        self.scan()
+        #self.scan()
 
 
     def close(self):
+        if not self.conn:
+            try:
+                self.conn = Socket(self.port, self.baudrate)
+            except OSError as e:
+                raise SonarNotFound(self.port,e)
         self.conn.close()
+
+    def cfg_callback(self,config,level):
+        rospy.loginfo("""Reconfigure Request: {port_enabled}, {port_baudrate}""".format(**config))
+        self.set_params(config)
+        return config
+
+    def set_params(self, params):
+        self.port_enabled = params["port_enabled"]
+        self.baudrate = params["port_baudrate"]
+
+        if self.port_enabled:
+            self.open()
+            #self.scan()
+        else:
+            try:
+                self.close()
+            except:
+                pass
 
     def configure(self):
         #self.conn.send(Message.MEASURE)
@@ -522,5 +555,12 @@ if __name__ == "__main__":
     baudrate = 115200
 
     with VA500(port,baudrate) as va500_altimeter:
-        pass
+        try:
+            va500_altimeter.scan()
+        except:
+            pass
+
+    
+
+
 
