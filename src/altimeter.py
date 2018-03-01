@@ -336,7 +336,10 @@ class Socket(object):
         return reply
 
 
-
+def cfg_callback(config,level):
+    rospy.loginfo("""Reconfigure Request: {port_enabled}, {port_baudrate}""".format(**config))
+    va500_altimeter.set_params(**config)
+    return config
 
 class VA500(object):
     """
@@ -362,8 +365,6 @@ class VA500(object):
         # Initialize parameters (just in case...)
         self.port_enabled = False
         self.port_baudrate = 115200
-
-        Server(ScanConfig,self.cfg_callback)
 
     def __enter__(self):
         """
@@ -424,14 +425,10 @@ class VA500(object):
                 raise SonarNotFound(self.port,e)
         self.conn.close()
 
-    def cfg_callback(self,config,level):
-        rospy.loginfo("""Reconfigure Request: {port_enabled}, {port_baudrate}""".format(**config))
-        self.set_params(config)
-        return config
 
-    def set_params(self, params):
-        self.port_enabled = params["port_enabled"]
-        self.baudrate = params["port_baudrate"]
+    def set_params(self, port_enabled = None, port_baudrate = None, groups = None):
+        self.port_enabled = port_enabled
+        self.baudrate = port_baudrate
 
         if self.port_enabled:
             self.open()
@@ -556,9 +553,11 @@ if __name__ == "__main__":
 
     with VA500(port,baudrate) as va500_altimeter:
         try:
+            Server(ScanConfig, cfg_callback)
+
             va500_altimeter.scan()
-        except:
-            pass
+        except KeyboardInterrupt:
+            sonar.preempt()
 
     
 
