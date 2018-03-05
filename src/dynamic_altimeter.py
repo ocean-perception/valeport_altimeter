@@ -16,9 +16,6 @@ from dynamic_reconfigure.server import Server
 from valeport_altimeter.cfg import ScanConfig
 
 
-
-
-
 class VA500(object):
     def __init__(self, port="/dev/ttyUSB0", baudrate = 115200):
         self.conn = None
@@ -63,14 +60,14 @@ class VA500(object):
         #self.scan()
 
 
-    def config_callback(self,config, level):
-        rospy.loginfo("""Reconfigure Request: {port_enabled}, {port_baudrate}""".format(**config))
+    def config_callback(self, config, level):
+        rospy.loginfo("""Reconfigure Request: {altimeter_port_enabled}, {altimeter_port_baudrate}""".format(**config))
         self.set_params(**config)
         return config
 
-    def set_params(self,port_enabled = None, port_baudrate = None, groups = None):
-        self.port_enabled = port_enabled
-        self.port_baudrate = port_baudrate
+    def set_params(self,altimeter_port_enabled = None, altimeter_port_baudrate = None, groups = None):
+        self.port_enabled = altimeter_port_enabled
+        self.port_baudrate = altimeter_port_baudrate
         if self.port_enabled:
             self.open()
         else:
