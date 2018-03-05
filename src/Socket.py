@@ -17,7 +17,9 @@ class Socket(object):
         :param port:
         :param baudrate:
         """
-        self.conn = serial.Serial(port=port, baudrate=baudrate, timeout=2)
+        self.conn = serial.Serial(timeout=2)
+        self.conn.port = port
+        self.conn.baudrate = baudrate
 
     def open(self):
         """

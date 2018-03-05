@@ -23,7 +23,7 @@ class VA500(object):
         self.baudrate = baudrate
 
         self.port_enabled = None
-        self.port_baudrate = None
+
 
         self.min_range = 0
         self.max_range = 1000
@@ -48,6 +48,9 @@ class VA500(object):
                 self.conn = Socket(self.port, self.baudrate)
             except OSError as e:
                 raise Errors.SonarNotFound(self.port,e)
+
+        self.conn.conn.port = self.port
+        self.conn.conn.baudrate = self.baudrate
         
         try:
             self.conn.open()
@@ -61,13 +64,15 @@ class VA500(object):
 
 
     def config_callback(self, config, level):
-        rospy.loginfo("""Reconfigure Request: {altimeter_port_enabled}, {altimeter_port_baudrate}""".format(**config))
+        rospy.loginfo("""Reconfigure Request: {altimeter_port_enabled}, {altimeter_port_baudrate},{altimeter_port}""".format(**config))
         self.set_params(**config)
         return config
 
-    def set_params(self,altimeter_port_enabled = None, altimeter_port_baudrate = None, groups = None):
+    def set_params(self,altimeter_port_enabled = None, altimeter_port_baudrate = None, altimeter_port=None ,groups = None):
         self.port_enabled = altimeter_port_enabled
         self.port_baudrate = altimeter_port_baudrate
+        self.baudrate = altimeter_port_baudrate
+        self.port = altimeter_port
         if self.port_enabled:
             self.open()
         else:
@@ -75,6 +80,7 @@ class VA500(object):
                 self.close()
             except:
                 pass
+
 
     def scan(self):
         r = rospy.Rate(10)
@@ -84,11 +90,11 @@ class VA500(object):
 
         while not rospy.is_shutdown():
             if self.port_enabled:
-                #print rospy.Time.now()
-                # Ask sonar to send a single measurement
-                
-                self.conn.send(Message.MEASURE)
-
+                try:
+                    # Ask sonar to send a single measurement                
+                    self.conn.send(Message.MEASURE)
+                except:
+                    rospy.logerr('Error writing to port. Try to change port')
 
                 # Get the scan data
                 try:
