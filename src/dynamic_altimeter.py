@@ -95,7 +95,7 @@ class VA500(object):
                     data = self.get(Message.DATA,wait = 2)#.payload
                     self.range = float(data)
                 except:
-                    rospy.logwarn("Error reading stream %s", data)
+                    rospy.logwarn("Error reading stream")
 
                 # Publish extracted data in personalised msg
                 pub2 = rospy.Publisher('range',Range, queue_size=10)
@@ -160,5 +160,6 @@ if __name__ == "__main__":
     baudrate = 115200
     with VA500(port,baudrate) as va500_altimeter:
         va500_altimeter.scan()
+    rospy.spin()
 
     
