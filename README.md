@@ -1,7 +1,7 @@
-# Tritech Profiler ROS Package
+# Valeport Altimeter ROS Package
 
-This ROS package configures and communicates with the Tritech Profiling sonar.
-**This has only been tested on ROS Indigo over RS232.**
+This ROS package configures and communicates with the Valeport Altimeter
+**This has been tested on ROS Indigo and Kinetic over RS232.**
 
 ## Setting up
 
