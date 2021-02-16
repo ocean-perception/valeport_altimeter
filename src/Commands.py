@@ -1,6 +1,6 @@
 import rospy
 import bitstring
-from Messages import Message
+from messages import Message
 
 class Command(object):
     """

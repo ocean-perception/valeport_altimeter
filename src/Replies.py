@@ -1,4 +1,7 @@
-from Messages import Message
+from .messages import Message
+from .errors import Error
+
+
 class Reply(object):
     """
     Parses and verifies reply packages
@@ -31,7 +34,7 @@ class Reply(object):
                     pass
 
                 else:
-                    raise PacketIncomplete("Packet does not end with carriage return")
+                    raise Error.PacketIncomplete("Packet does not end with carriage return")
 
                 if self.bitstream.find('0x 50 52 56 41 54',bytealigned=True): # If 'PRVAT' text in bitstream
                     self.dataformat = 'NMEA'
@@ -60,6 +63,6 @@ class Reply(object):
                 pass
 
         except ValueError as e:
-            raise PacketCorrupted("Unexpected error", e)
+            raise Error.PacketCorrupted("Unexpected error", e)
 
 

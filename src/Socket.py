@@ -2,10 +2,10 @@ import rospy
 import serial
 import select
 import bitstring
-import Errors
-from Replies import Reply
-from Commands import Command
-from Messages import Message
+from .errors import Error
+from .replies import Reply
+from .commands import Command
+from .messages import Message
 
 class Socket(object):
     """
@@ -100,8 +100,7 @@ class Socket(object):
                 except:
                     continue
 
-
-        except select.error as (code,msg):
+        except select.error as (code, msg):
              if code == errno.EINTR:
                  raise KeyboardInterrupt()
              raise
