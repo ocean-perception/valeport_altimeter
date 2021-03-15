@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import rospy
-import bitstring
+import rospy  # noqa
+import bitstring  # noqa
 
 
 class Message(object):

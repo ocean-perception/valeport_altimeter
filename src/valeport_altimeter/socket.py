@@ -1,10 +1,10 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import rospy
+import rospy  # noqa
 import serial
 import select
-import bitstring
+import bitstring  # noqa
 import errno
 from valeport_altimeter.replies import Reply
 from valeport_altimeter.commands import Command, Message

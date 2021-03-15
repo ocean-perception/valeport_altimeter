@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+from valeport_altimeter.commands import Message
+
 
 class Error:
     class SonarNotFound(Exception):
