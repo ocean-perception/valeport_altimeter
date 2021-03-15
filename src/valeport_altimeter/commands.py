@@ -1,6 +1,10 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
 import rospy
 import bitstring
-from messages import Message
+from .messages import Message
+
 
 class Command(object):
     """

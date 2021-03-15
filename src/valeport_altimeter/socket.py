@@ -1,11 +1,13 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
 import rospy
 import serial
 import select
 import bitstring
-from valeport_altimeter.errors import Error
-from valeport_altimeter.replies import Reply
-from valeport_altimeter.commands import Command
-from valeport_altimeter.messages import Message
+from .replies import Reply
+from .commands import Command
+from .messages import Message
 
 class Socket(object):
     """

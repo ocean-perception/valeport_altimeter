@@ -2,18 +2,12 @@
 # -*- coding: utf-8 -*-
 
 import rospy
-import serial
-import bitstring
-import binascii
-import select
 import datetime
 from sensor_msgs.msg import Range
 
-from valeport_altimeter.socket import Socket
-from valeport_altimeter.messages import Message
-from valeport_altimeter.commands import Command
-from valeport_altimeter.replies import Reply
-from valeport_altimeter.errors import Error
+from .socket import Socket
+from .messages import Message
+from .errors import Error
 
 
 class VA500(object):
