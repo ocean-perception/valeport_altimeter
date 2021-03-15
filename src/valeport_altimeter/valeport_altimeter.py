@@ -5,9 +5,9 @@ import rospy
 import datetime
 from sensor_msgs.msg import Range
 
-from .socket import Socket
-from .messages import Message
-from .errors import Error
+from valeport_altimeter.socket import Socket
+from valeport_altimeter.messages import Message
+from valeport_altimeter.error import Error
 
 
 class VA500(object):
@@ -163,9 +163,9 @@ class VA500(object):
         raise TimeoutError()
 
 
-if __name__ == "__main__":
+def main():
     # Initialize node
-    rospy.init_node('valeport_altimeter', log_level=rospy.DEBUG)
+    rospy.init_node('altimeter_node', log_level=rospy.DEBUG)
 
     # Add private parameters
     port = rospy.get_param('~port', '/dev/ttyUSB0')
@@ -175,12 +175,11 @@ if __name__ == "__main__":
     min_range_m = rospy.get_param('~min_range_m', '0')
     max_range_m = rospy.get_param('~max_range_m', '10')
 
-    va500_altimeter =  VA500(port, baudrate, frame_id, min_range_m, max_range_m)
+    va500_altimeter = VA500(port, baudrate, frame_id, min_range_m, max_range_m)
 
     r = rospy.Rate(rate_hz)
     while not rospy.is_shutdown():
-	print("SPIN")
+        print("SPIN")
         va500_altimeter.scan()
         rospy.spinOnce()
         r.sleep()
-
