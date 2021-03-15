@@ -399,11 +399,11 @@ class VA500(object):
         self.min_range = max_range
 
         rospy.loginfo("Valeport altimeter node is up!")
-        rospy.loginfo("\t* port:", port)
-        rospy.loginfo("\t* baudrate:", baudrate)
-        rospy.loginfo("\t* frame_id:", frame_id)
-        rospy.loginfo("\t* max_range:", max_range)
-        rospy.loginfo("\t* min_range:", min_range)
+        rospy.loginfo("\t* port: %s", port)
+        rospy.loginfo("\t* baudrate: %s", baudrate)
+        rospy.loginfo("\t* frame_id: %s", frame_id)
+        rospy.loginfo("\t* max_range: %s", max_range)
+        rospy.loginfo("\t* min_range: %s", min_range)
 
         # Publish extracted data in personalised msg
         self.pub = rospy.Publisher("range", Range, queue_size=1)
