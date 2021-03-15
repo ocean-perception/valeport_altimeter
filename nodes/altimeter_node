@@ -386,8 +386,6 @@ class VA500(object):
         :param port:
         :param baudrate: Baud rate, 115200 by default (can be 9600-115200)
         """
-
-        print("INIT")
         self.port = port
         self.baudrate = baudrate
 
@@ -453,6 +451,7 @@ class VA500(object):
         """
         # send here something to verify sonar is connected?
         if not self.initialized:
+            rospy.error("Sonar is not configured")
             raise Error.SonarNotConfigured(self.initialized)
 
         # Ask sonar to send a single measurement
@@ -531,9 +530,10 @@ def main():
 
     va500_altimeter = VA500(port, baudrate, frame_id, min_range_m, max_range_m)
 
+    va500_altimeter.open()
+
     r = rospy.Rate(rate_hz)
     while not rospy.is_shutdown():
-        print("SPIN")
         va500_altimeter.scan()
         rospy.spinOnce()
         r.sleep()
