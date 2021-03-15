@@ -2,10 +2,10 @@ import rospy
 import serial
 import select
 import bitstring
-from .errors import Error
-from .replies import Reply
-from .commands import Command
-from .messages import Message
+from valeport_altimeter.errors import Error
+from valeport_altimeter.replies import Reply
+from valeport_altimeter.commands import Command
+from valeport_altimeter.messages import Message
 
 class Socket(object):
     """

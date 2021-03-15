@@ -9,11 +9,11 @@ import select
 import datetime
 from sensor_msgs.msg import Range
 
-from .socket import Socket
-from .messages import Message
-from .command import Command
-from .replies import Reply
-from .errors import Error
+from valeport_altimeter.socket import Socket
+from valeport_altimeter.messages import Message
+from valeport_altimeter.commands import Command
+from valeport_altimeter.replies import Reply
+from valeport_altimeter.errors import Error
 
 
 class VA500(object):
@@ -31,10 +31,11 @@ class VA500(object):
             min_range = 0,
             max_range = 10):
         """
-
         :param port:
         :param baudrate: Baud rate, 115200 by default (can be 9600-115200)
         """
+
+	print("INIT")
         self.port = port
         self.baudrate = baudrate
 
@@ -184,6 +185,7 @@ if __name__ == "__main__":
 
     r = rospy.Rate(rate_hz)
     while not rospy.is_shutdown():
+	print("SPIN")
         va500_altimeter.scan()
         rospy.spinOnce()
         r.sleep()

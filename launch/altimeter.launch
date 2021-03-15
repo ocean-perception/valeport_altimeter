@@ -1,0 +1,10 @@
+<launch>
+    <node pkg="valeport_altimeter" type="valeport_altimeter.py" name="altimeter" output="screen">
+        <param name="port" value="/dev/serial/by-id/usb-FTDI_FT232R_USB_UART_A107R32L-if00-port0"/>
+        <param name="baudrate" value="115200"/>
+        <param name="rate_hz" value="1.0"/>
+        <param name="frame_id" value="valeport_altimeter"/>
+        <param name="min_range_m" value="1.0"/>
+        <param name="max_range_m" value="60.0"/>
+    </node>
+</launch>
