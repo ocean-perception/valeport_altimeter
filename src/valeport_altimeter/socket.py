@@ -5,15 +5,17 @@ import rospy
 import serial
 import select
 import bitstring
+import errno
 from valeport_altimeter.replies import Reply
-from valeport_altimeter.commands import Command
-from valeport_altimeter.messages import Message
+from valeport_altimeter.commands import Command, Message
+
 
 class Socket(object):
     """
     Sonar connection
     """
-    def __init__(self, port,baudrate):
+
+    def __init__(self, port, baudrate):
         """
 
         :param port:
@@ -37,18 +39,18 @@ class Socket(object):
         """
         self.conn.close()
 
-    def send(self, message, payload = None, command = None):
+    def send(self, message, payload=None, command=None):
         """
         :param message:
         :param payload:
         :return:
         """
-        cmd = Command(message, payload,command)
+        cmd = Command(message, payload, command)
         rospy.logdebug("Sending %s: %s", Message.to_string(message), command)
         self.conn.write(cmd.serialize())
 
     def _readline(self):
-        eol = b'*'
+        eol = b"*"
         leneol = len(eol)
         line = bytearray()
         while True:
@@ -61,7 +63,7 @@ class Socket(object):
                 break
         return bytes(line)
 
-    def get_reply(self, expected_reply = None, enabled = False):
+    def get_reply(self, expected_reply=None, enabled=False):
         """
         Waits for and returns reply
         :return:
@@ -70,19 +72,21 @@ class Socket(object):
             # Wait for the header character
             # Don't put anything in this while, because if losses packets if you do so
             if expected_reply:
-                while not self.conn.read() == '$':
+                while not self.conn.read() == "$":
                     pass
 
             # Initialize empty packet where the received stream will be saved
             packet = bitstring.BitStream()
 
-            if expected_reply == '>':
+            if expected_reply == ">":
                 message_id = Message.READY_2_CONFIGURE
                 rospy.logdebug("Sonar altimeter in configuration mode")
-                reply = Reply(packet.append("0x{:02X}".format(ord('>'))), id=message_id)
+                reply = Reply(
+                    packet.append("0x{:02X}".format(ord(">"))), id=message_id
+                )
                 return reply
 
-            elif expected_reply == '$':
+            elif expected_reply == "$":
                 message_id = Message.DATA
                 rospy.logdebug("Received valid packet with sensor data")
             else:
@@ -94,18 +98,18 @@ class Socket(object):
             while enabled:
                 try:
                     # Read the message sent by altimeter. It always has length 22
-                    current_line.append(self.conn.read(22))     
+                    current_line.append(self.conn.read(22))
                     # Separate fields by commas
-                    char = str(current_line).split(',')
+                    char = str(current_line).split(",")
                     measurement = char[1]
                     break
                 except:
                     continue
 
-        except select.error as (code, msg):
-             if code == errno.EINTR:
-                 raise KeyboardInterrupt()
-             raise
+        except OSError as e:
+            if e.errno == errno.EINTR:
+                raise KeyboardInterrupt()
+            raise
 
         rospy.logdebug("Received: %s", measurement)
-        return measurement #reply
+        return measurement  # reply

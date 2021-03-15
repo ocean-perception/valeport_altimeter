@@ -2,15 +2,44 @@
 # -*- coding: utf-8 -*-
 
 
-from valeport_altimeter.messages import Message
-from valeport_altimeter.errors import Error
+class Error:
+    class SonarNotFound(Exception):
+        """Sonar port could not be found."""
+
+        pass
+
+    class DataNotSent(Exception):
+        """Sonar is not sending information."""
+
+        pass
+
+    class PacketIncomplete(Exception):
+        """Packet is incomplete."""
+
+        pass
+
+    class PacketCorrupted(Exception):
+        """Packet is corrupt."""
+
+        pass
+
+    class SonarNotConfigured(Exception):
+        """Sonar is not configured for scanning."""
+
+        pass
+
+    class TimeoutError(Exception):
+        """Communication timed out."""
+
+        pass
 
 
 class Reply(object):
     """
     Parses and verifies reply packages
     """
-    def __init__(self, bitstream, id = 0):
+
+    def __init__(self, bitstream, id=0):
         """
 
         :param bitstream:
@@ -19,7 +48,7 @@ class Reply(object):
         self.id = id
         self.name = Message.to_string(self.id)
         self.payload = None
-        self.dataformat = 'NMEA'
+        self.dataformat = "NMEA"
         self.dataunits = None
 
         self.parse()
@@ -38,29 +67,41 @@ class Reply(object):
                     pass
 
                 else:
-                    raise Error.PacketIncomplete("Packet does not end with carriage return")
+                    raise Error.PacketIncomplete(
+                        "Packet does not end with carriage return"
+                    )
 
-                if self.bitstream.find('0x 50 52 56 41 54',bytealigned=True): # If 'PRVAT' text in bitstream
-                    self.dataformat = 'NMEA'
+                if self.bitstream.find(
+                    "0x 50 52 56 41 54", bytealigned=True
+                ):  # If 'PRVAT' text in bitstream
+                    self.dataformat = "NMEA"
                 else:
-                    self.dataformat = 'TRITECH'
+                    self.dataformat = "TRITECH"
 
-                if self.dataformat=='NMEA' and self.id != Message.CONFIGURATION_PARAM:
+                if (
+                    self.dataformat == "NMEA"
+                    and self.id != Message.CONFIGURATION_PARAM
+                ):
                     # go to first comma
-                    self.bitstream.bytepos = self.bitstream.find('0x2C', bytealigned = True)[0]/8 + 1
-                    self.payload = self.bitstream.read('bytes:6')
-                    #skip comma
-                    self.bitstream.read('bytes:1')
-                    self.dataunits = self.bitstream.read('bytes:1')
+                    self.bitstream.bytepos = (
+                        self.bitstream.find("0x2C", bytealigned=True)[0] / 8
+                        + 1
+                    )
+                    self.payload = self.bitstream.read("bytes:6")
+                    # skip comma
+                    self.bitstream.read("bytes:1")
+                    self.dataunits = self.bitstream.read("bytes:1")
 
-
-                elif self.dataformat=='TRITECH' and self.id != Message.CONFIGURATION_PARAM:
+                elif (
+                    self.dataformat == "TRITECH"
+                    and self.id != Message.CONFIGURATION_PARAM
+                ):
                     self.bitstream.bytepos = 0
-                    self.payload = self.bitstream.read('bytes:6')
-                    self.dataunits = self.bitstream.read('bytes:1')
+                    self.payload = self.bitstream.read("bytes:6")
+                    self.dataunits = self.bitstream.read("bytes:1")
                 else:
                     self.bitstream.bytepos = 0
-                    length_string = 'bytes:'+ str(len(self.bitstream)/8)
+                    length_string = "bytes:" + str(len(self.bitstream) / 8)
                     self.payload = self.bitstream.read(length_string)
 
             else:
@@ -68,5 +109,3 @@ class Reply(object):
 
         except ValueError as e:
             raise Error.PacketCorrupted("Unexpected error", e)
-
-

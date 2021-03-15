@@ -6,8 +6,7 @@ import datetime
 from sensor_msgs.msg import Range
 
 from valeport_altimeter.socket import Socket
-from valeport_altimeter.messages import Message
-from valeport_altimeter.error import Error
+from valeport_altimeter.replies import Message, Error
 
 
 class VA500(object):
@@ -18,18 +17,19 @@ class VA500(object):
     MAX_TIMEOUT_COUNT = 5
 
     def __init__(
-            self, 
-            port="/dev/ttyUSB0", 
-            baudrate = 115200,
-            frame_id = 'valeport_altimeter',
-            min_range = 0,
-            max_range = 10):
+        self,
+        port="/dev/ttyUSB0",
+        baudrate=115200,
+        frame_id="valeport_altimeter",
+        min_range=0,
+        max_range=10,
+    ):
         """
         :param port:
         :param baudrate: Baud rate, 115200 by default (can be 9600-115200)
         """
 
-	print("INIT")
+        print("INIT")
         self.port = port
         self.baudrate = baudrate
 
@@ -43,11 +43,11 @@ class VA500(object):
         self.min_range = max_range
 
         # Publish extracted data in personalised msg
-        self.pub = rospy.Publisher('range', Range, queue_size=1)
+        self.pub = rospy.Publisher("range", Range, queue_size=1)
 
         self.range_msg = Range()
         self.range_msg.radiation_type = 2  # Source radiation: sound
-        self.range_msg.field_of_view = 0.1 # the size of the arc [rad]
+        self.range_msg.field_of_view = 0.1  # the size of the arc [rad]
         self.range_msg.header.frame_id = frame_id
         self.range_msg.min_range = self.min_range
         self.range_msg.max_range = self.max_range
@@ -80,11 +80,10 @@ class VA500(object):
             try:
                 self.conn = Socket(self.port, self.baudrate)
             except OSError as e:
-                raise Error.SonarNotFound(self.port,e)
+                raise Error.SonarNotFound(self.port, e)
 
         rospy.loginfo("Initializing sonar altimeter on %s", self.port)
         self.initialized = True
-
 
     def close(self):
         self.conn.close()
@@ -97,16 +96,13 @@ class VA500(object):
         # send here something to verify sonar is connected?
         if not self.initialized:
             raise Error.SonarNotConfigured(self.initialized)
-        
-        
-
 
         # Ask sonar to send a single measurement
         self.conn.send(Message.MEASURE)
 
         # Get the scan data
         try:
-            data = self.get(Message.DATA,wait = 1).payload
+            data = self.get(Message.DATA, wait=1).payload
             self.range_msg.header.stamp = rospy.Time.now()
             self.range_msg.range = float(data)
             self.pub.publish(self.range_msg)
@@ -119,7 +115,7 @@ class VA500(object):
                 self.conn.send(Message.MEASURE)
                 self.timeout_count = 0
 
-    def get(self, message = None, wait = 2):
+    def get(self, message=None, wait=2):
         """
         Sends command and returns reply
         :param message: Message to expect
@@ -154,7 +150,7 @@ class VA500(object):
                     break
                 # Verify reply ID if requested
             if reply.id == message:
-                #rospy.logdebug("Found %s message", expected_name)
+                # rospy.logdebug("Found %s message", expected_name)
                 return reply
             else:
                 rospy.logwarn("Received unexpected %s message", reply.name)
@@ -165,15 +161,15 @@ class VA500(object):
 
 def main():
     # Initialize node
-    rospy.init_node('altimeter_node', log_level=rospy.DEBUG)
+    rospy.init_node("altimeter_node", log_level=rospy.DEBUG)
 
     # Add private parameters
-    port = rospy.get_param('~port', '/dev/ttyUSB0')
-    baudrate = rospy.get_param('~baudrate', 115200)
-    rate_hz = rospy.get_param('~rate_hz', 1)
-    frame_id = rospy.get_param('~frame_id', 'valeport_altimeter')
-    min_range_m = rospy.get_param('~min_range_m', '0')
-    max_range_m = rospy.get_param('~max_range_m', '10')
+    port = rospy.get_param("~port", "/dev/ttyUSB0")
+    baudrate = rospy.get_param("~baudrate", 115200)
+    rate_hz = rospy.get_param("~rate_hz", 1)
+    frame_id = rospy.get_param("~frame_id", "valeport_altimeter")
+    min_range_m = rospy.get_param("~min_range_m", "0")
+    max_range_m = rospy.get_param("~max_range_m", "10")
 
     va500_altimeter = VA500(port, baudrate, frame_id, min_range_m, max_range_m)
 
