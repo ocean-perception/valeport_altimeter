@@ -398,6 +398,13 @@ class VA500(object):
         self.max_range = min_range
         self.min_range = max_range
 
+        rospy.info("Valeport altimeter node is up!")
+        rospy.info("\t* port:", port)
+        rospy.info("\t* baudrate:", baudrate)
+        rospy.info("\t* frame_id:", frame_id)
+        rospy.info("\t* max_range:", max_range)
+        rospy.info("\t* min_range:", min_range)
+
         # Publish extracted data in personalised msg
         self.pub = rospy.Publisher("range", Range, queue_size=1)
 
@@ -432,13 +439,12 @@ class VA500(object):
         :return:
         """
         # Initialize the port
+        rospy.loginfo("Initializing altimeter on %s", self.port)
         if not self.conn:
             try:
                 self.conn = Socket(self.port, self.baudrate)
             except OSError as e:
                 raise Error.SonarNotFound(self.port, e)
-
-        rospy.loginfo("Initializing sonar altimeter on %s", self.port)
         self.initialized = True
 
     def close(self):
