@@ -2,8 +2,8 @@
 # -*- coding: utf-8 -*-
 
 
-from .messages import Message
-from .errors import Error
+from valeport_altimeter.messages import Message
+from valeport_altimeter.errors import Error
 
 
 class Reply(object):

@@ -3,7 +3,7 @@
 
 import rospy
 import bitstring
-from .messages import Message
+from valeport_altimeter.messages import Message
 
 
 class Command(object):

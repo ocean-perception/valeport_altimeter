@@ -5,9 +5,9 @@ import rospy
 import serial
 import select
 import bitstring
-from .replies import Reply
-from .commands import Command
-from .messages import Message
+from valeport_altimeter.replies import Reply
+from valeport_altimeter.commands import Command
+from valeport_altimeter.messages import Message
 
 class Socket(object):
     """
