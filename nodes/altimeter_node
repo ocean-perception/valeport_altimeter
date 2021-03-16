@@ -276,6 +276,7 @@ class Socket(object):
         self.conn = serial.Serial(timeout=2)
         self.conn.port = port
         self.conn.baudrate = baudrate
+	self.open()
 
     def open(self):
         """
