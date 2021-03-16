@@ -497,10 +497,13 @@ class VA500(object):
             rospy.logdebug("Waiting for unlabeled message")
 
         # Determine end time
-        end = datetime.datetime.now() + datetime.timedelta(seconds=wait)
+        start_time = datetime.datetime.now()
+        elapsed_seconds = (datetime.datetime.now() - start_time).seconds
 
         # Wait until received if a specific message ID is requested, otherwise wait forever
-        while message is None or datetime.datetime.now() < end:
+        while message is None or elapsed_seconds < wait:
+            print('Elapsed: %s s', elapsed_seconds)
+            elapsed_seconds = (datetime.datetime.now() - start_time).seconds
             if message is None:
                 try:
                     reply = self.conn.get_reply()
@@ -542,7 +545,6 @@ def main():
     r = rospy.Rate(rate_hz)
     while not rospy.is_shutdown():
         va500_altimeter.scan()
-        rospy.spinOnce()
         r.sleep()
 
 
