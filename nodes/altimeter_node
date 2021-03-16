@@ -14,6 +14,7 @@ from sensor_msgs.msg import Range
 class Message(object):
     """
     Enumeration of available messages
+    https://www.valeport.co.uk/content/uploads/2020/03/VA500-Altimeter-Operating-Manual-0430844f.pdf
     """
 
     CONFIGURATION_PARAM = 0
@@ -26,10 +27,10 @@ class Message(object):
     TRANSDUCER_FREQ = 0x383339  # 839
 
     # Communication settings
-    BAUD_RATE = 0x303539  # 059
+    SET_BAUD_RATE = 0x303539  # 059
     SET_ADDRESS_485 = 0x303031  # 001
     ADDRESS_485 = 0x303032  # 002
-    ADDRESS_MODE_CONF = 0x303035  # 005
+    ADDRESS_MODE_CONF = 0x303035  # 005 with ON or OFF
     ADDRESS_MODE = 0x303036  # 006
 
     # Analogue settings
@@ -41,10 +42,8 @@ class Message(object):
 
     # Sampling regime
     SINGLE_MEASURE = 0x53  # hex value of 'S'
-    DATA = "$"  #
     MEASURE = 0x4D  # hex value of 'M'
     CONFIGURE = 0x23  # hex value of #
-    READY_2_CONFIGURE = ">"
     SET_MEASURE_MODE = 0x303339  # 039
     OPERATING_MODE = 0x303430  # 040
     RUN = 0x303238  # 028
@@ -54,14 +53,20 @@ class Message(object):
     SET_OUTPUT_FORMAT = 0x303832  # 082
 
     # Range settings
-    SET_RANGE_UNITS = 0x303231  # 021
+    SET_RANGE_UNITS = 0x303231  # 021 with 1 to meters
     RANGE_UNITS = 0x303232  # 022
-    SET_ERROR_MSG = 0x313138  # 118
+    SET_ERROR_MSG = 0x313138  # 118 Where 0=zero (0.000), 1=-999, 2=NR
     ERROR_MSG = 0x313139  # 119
+    SET_MAX_RANGE = 0x383233  # 823 with max range
     MAX_RANGE = 0x383234  # 824
+    SET_MINIMUM_RANGE = 0x383430  # 840 with min range
     MINIMUM_RANGE = 0x383431  # 841
-    CHANGE_SOUND_SPEED = 0x383330  # 830
+    SET_SOUND_SPEED = 0x383330  # 830
     SOUND_SPEED = 0x383331  # 831
+
+    # Data headers
+    DATA = "$"  #
+    READY_2_CONFIGURE = ">"
 
     @classmethod
     def to_string(cls, id):
@@ -321,51 +326,40 @@ class Socket(object):
         Waits for and returns reply
         :return:
         """
-        try:
-            # Wait for the header character
-            # Don't put anything in this while, because if losses packets if you do so
-            if expected_reply:
-                while not self.conn.read() == "$":
-                    pass
+        # Wait for the header character
+        # Don't put anything in this while, because if losses packets if you do so
+        if expected_reply:
+            while not self.conn.read() == "$":
+                pass
 
-            # Initialize empty packet where the received stream will be saved
-            packet = bitstring.BitStream()
+        # Initialize empty packet where the received stream will be saved
+        packet = bitstring.BitStream()
 
-            if expected_reply == ">":
-                message_id = Message.READY_2_CONFIGURE
-                rospy.logdebug("Sonar altimeter in configuration mode")
-                reply = Reply(
-                    packet.append("0x{:02X}".format(ord(">"))), id=message_id
-                )
-                return reply
+        if expected_reply == ">":
+            message_id = Message.READY_2_CONFIGURE
+            rospy.logdebug("Sonar altimeter in configuration mode")
+            reply = Reply(
+                packet.append("0x{:02X}".format(ord(">"))), id=message_id
+            )
+            return reply
 
-            elif expected_reply == "$":
-                message_id = Message.DATA
-                rospy.logdebug("Received valid packet with sensor data")
-            else:
-                rospy.logdebug("Received packet with configuration parameters")
-                message_id = Message.CONFIGURATION_PARAM
-
+        elif expected_reply == "$":
+            message_id = Message.DATA
+            rospy.logdebug("Received valid packet with sensor data")
             # Convert each caracter from received string stream in the bitstream
             current_line = []
-            while enabled:
-                try:
-                    # Read the message sent by altimeter. It always has length 22
-                    current_line.append(self.conn.read(22))
-                    # Separate fields by commas
-                    char = str(current_line).split(",")
-                    measurement = char[1]
-                    break
-                except:
-                    continue
+            # Read the message sent by altimeter. It always has length 22
+            current_line.append(self.conn.read(22))
+            # Separate fields by commas
+            char = str(current_line).split(",")
+            measurement = char[1]
+            rospy.logdebug("Received: %s", measurement)
+            return measurement  # reply
+        else:
+            rospy.logdebug("Received packet with configuration parameters")
+            message_id = Message.CONFIGURATION_PARAM
 
-        except OSError as e:
-            if e.errno == errno.EINTR:
-                raise KeyboardInterrupt()
-            raise
-
-        rospy.logdebug("Received: %s", measurement)
-        return measurement  # reply
+        
 
 
 class VA500(object):
