@@ -471,7 +471,7 @@ class VA500(object):
             self.range_msg.range = float(data)
             self.pub.publish(self.range_msg)
             self.timeout_count = 0
-        except TimeoutError:
+        except Error.TimeoutError:
             self.timeout_count += 1
             rospy.logdebug("Timeout count: %d", self.timeout_count)
             if self.timeout_count >= self.MAX_TIMEOUT_COUNT:
@@ -520,7 +520,7 @@ class VA500(object):
                 rospy.logwarn("Received unexpected %s message", reply.name)
         # Timeout
         rospy.logerr("Timed out before receiving message: %s", expected_name)
-        raise TimeoutError()
+        raise Error.TimeoutError()
 
 
 def main():
