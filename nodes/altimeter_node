@@ -1,404 +1,109 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 
-import datetime
-import errno
-import select
-
-import bitstring
-import rospy
+import thread
+import os
+import time
+import sys
+import traceback
+from serial.serialutil import SerialException
 import serial
+import rospy
 from sensor_msgs.msg import Range
 
 
-class Message(object):
+class VA500:
     """
     Enumeration of available messages
-    https://www.valeport.co.uk/content/uploads/2020/03/VA500-Altimeter-Operating-Manual-0430844f.pdf
+    https://www.valeport.co.uk/content/uploads/2020/03/VA500-Altimeter-Operating-Manual-0430844f.pdf  # noqa
     """
-
-    CONFIGURATION_PARAM = 0
-
     # Instrument settings
-    SW_VERSION = 0x303332  # 032
-    UNIT_SERIAL_NUM = 0x303334  # 034
-    PCB_SERIAL_NUM = 0x313336  # 136
-    CALIBRATION_DATE = 0x313338  # 138
-    TRANSDUCER_FREQ = 0x383339  # 839
+    GET_SW_VERSION = '#032'
+    GET_UNIT_SERIAL_NUM = '#034'
+    GET_PCB_SERIAL_NUM = '#136'
+    GET_CALIBRATION_DATE = '#138'
+    GET_TRANSDUCER_FREQ = '#839'
 
     # Communication settings
-    SET_BAUD_RATE = 0x303539  # 059
-    SET_ADDRESS_485 = 0x303031  # 001
-    ADDRESS_485 = 0x303032  # 002
-    ADDRESS_MODE_CONF = 0x303035  # 005 with ON or OFF
-    ADDRESS_MODE = 0x303036  # 006
+    SET_BAUD_RATE = '#059'
+    SET_ADDRESS_485 = '#001'
+    ADDRESS_485 = '#002'
+    ADDRESS_MODE_CONF = '#005'
+    ADDRESS_MODE = '#006'
 
     # Analogue settings
-    SET_VOLTAGE_RANGE = 0x303934  # 094
-    VOLTAGE_RANGE = 0x303935  # 095
-    ANALOG_OUTPUT_TEST = 0x303936  # 096
-    SET_ANALOG_RANGE_LIMIT = 0x303937  # 097
-    ANALOG_RANGE_LIMIT = 0x303938  # 098
+    SET_VOLTAGE_RANGE = '#094'
+    GET_VOLTAGE_RANGE = '#095'
+    ANALOG_OUTPUT_TEST = '#096'
+    SET_ANALOG_RANGE_LIMIT = '#097'
+    GET_ANALOG_RANGE_LIMIT = '#098'
 
     # Sampling regime
-    SINGLE_MEASURE = 0x53  # hex value of 'S'
-    MEASURE = 0x4D  # hex value of 'M'
-    CONFIGURE = 0x23  # hex value of #
-    SET_MEASURE_MODE = 0x303339  # 039
-    OPERATING_MODE = 0x303430  # 040
-    RUN = 0x303238  # 028
+    SINGLE_MEASURE = 'S'
+    CONTINUOUS_MEASURE = 'M'
+    CONFIGURE = '#'
+    SET_MEASURE_MODE = '#039'
+    GET_MEASURE_MODE = '#040'
+    RUN = '#028'
 
     # Output format
-    OUTPUT_FORMAT = 0x303238  # 089
-    SET_OUTPUT_FORMAT = 0x303832  # 082
+    GET_OUTPUT_FORMAT = '#089'
+    SET_OUTPUT_FORMAT = '#082'
 
     # Range settings
-    SET_RANGE_UNITS = 0x303231  # 021 with 1 to meters
-    RANGE_UNITS = 0x303232  # 022
-    SET_ERROR_MSG = 0x313138  # 118 Where 0=zero (0.000), 1=-999, 2=NR
-    ERROR_MSG = 0x313139  # 119
-    SET_MAX_RANGE = 0x383233  # 823 with max range
-    MAX_RANGE = 0x383234  # 824
-    SET_MINIMUM_RANGE = 0x383430  # 840 with min range
-    MINIMUM_RANGE = 0x383431  # 841
-    SET_SOUND_SPEED = 0x383330  # 830
-    SOUND_SPEED = 0x383331  # 831
 
-    # Data headers
-    DATA = "$"  #
-    READY_2_CONFIGURE = ">"
+    SET_RANGE_UNITS = '#021'
+    GET_RANGE_UNITS = '#022'
+    SET_ERROR_MSG = '#118'
+    GET_ERROR_MSG = '#119'
+    SET_MAX_RANGE = '#823'
+    GET_MAX_RANGE = '#824'
+    SET_MIN_RANGE = '#840'
+    GET_MIN_RANGE = '#841'
+    SET_SOUND_SPEED = '#830'
+    GETSOUND_SPEED = '#831'
 
-    @classmethod
-    def to_string(cls, id):
-        """
-        Get human-readable name corresponding to message id
-        :param cls:
-        :param id: message ID
-        :return:
-        """
-        for attr, value in cls.__dict__.items():
-            if value == id:
-                return attr
-        else:
-            return None
-
-    @classmethod
-    def from_string(cls, name):
-        """
-        Gets message ID corresponding to human-readable name.
-        :param name: Human-readable string
-        :return:
-        """
-        if hasattr(cls, name):
-            return cls.__getattribute__(name)
-        else:
-            return None
-
-
-class Command(object):
-    """
-    Sonar commands
-    """
-
-    def __init__(self, id, payload=None, command=None):
-        """
-        Construct command object
-        :param id:
-        :param payload:
-        """
-
-        self.id = id
-
-        self.payload = payload if payload else bitstring.BitStream()
-
-        self.command = command if command else bitstring.BitStream()
-
-    def serialize(self):
-        """
-        Construct string of bytes to send to sonar
-        :return:
-        """
-
-        # The len must be multiple of 4 bits to convert unambiguously
-
-        id_len = self.id.bit_length()
-        while (id_len % 4) != 0:
-            id_len += 1
-        if self.payload:
-            pay_len = self.payload.bit_length()
-            while (pay_len % 4) != 0:
-                pay_len += 1
-        else:
-            pay_len = 0
-        if self.command:
-            com_len = self.command.bit_length()
-            while (com_len % 4) != 0:
-                com_len += 1
-        else:
-            com_len = 0
-
-        values = {
-            "id": self.id,
-            "id_len": id_len,
-            "payload": self.payload,
-            "payload_len": pay_len,
-            "command": self.command,
-            "command_len": com_len,
-        }
-
-        if self.id == Message.MEASURE or self.id == Message.SINGLE_MEASURE:
-            serial_format = "uint:id_len=id, bits:payload_len=payload, bits:command_len = command, 0x0D0A"
-        else:
-            serial_format = "0x23, uint:id_len=id, bits:payload_len=payload, bits:command_len = command, 0x0D0A"
-
-        message = bitstring.pack(serial_format, **values)
-
-        rospy.logdebug("Sent command '0x%s'", message.hex)
-
-        return message.tobytes()
-
-
-class Error:
-    class SonarNotFound(Exception):
-        """Sonar port could not be found."""
-
-        pass
-
-    class DataNotSent(Exception):
-        """Sonar is not sending information."""
-
-        pass
-
-    class PacketIncomplete(Exception):
-        """Packet is incomplete."""
-
-        pass
-
-    class PacketCorrupted(Exception):
-        """Packet is corrupt."""
-
-        pass
-
-    class SonarNotConfigured(Exception):
-        """Sonar is not configured for scanning."""
-
-        pass
-
-    class TimeoutError(Exception):
-        """Communication timed out."""
-
-        pass
-
-
-class Reply(object):
-    """
-    Parses and verifies reply packages
-    """
-
-    def __init__(self, bitstream, id=0):
-        """
-
-        :param bitstream:
-        """
-        self.bitstream = bitstream
-        self.id = id
-        self.name = Message.to_string(self.id)
-        self.payload = None
-        self.dataformat = "NMEA"
-        self.dataunits = None
-
-        self.parse()
-
-    def parse(self):
-        """
-        Parses packet into header, message ID and payload
-        :return:
-        """
-        try:
-            if self.bitstream:
-                # Parse message header
-                self.bitstream.bytepos = 0
-
-                if self.bitstream.endswith("\n"):
-                    pass
-
-                else:
-                    raise Error.PacketIncomplete(
-                        "Packet does not end with carriage return"
-                    )
-
-                if self.bitstream.find(
-                    "0x 50 52 56 41 54", bytealigned=True
-                ):  # If 'PRVAT' text in bitstream
-                    self.dataformat = "NMEA"
-                else:
-                    self.dataformat = "TRITECH"
-
-                if (
-                    self.dataformat == "NMEA"
-                    and self.id != Message.CONFIGURATION_PARAM
-                ):
-                    # go to first comma
-                    self.bitstream.bytepos = (
-                        self.bitstream.find("0x2C", bytealigned=True)[0] / 8
-                        + 1
-                    )
-                    self.payload = self.bitstream.read("bytes:6")
-                    # skip comma
-                    self.bitstream.read("bytes:1")
-                    self.dataunits = self.bitstream.read("bytes:1")
-
-                elif (
-                    self.dataformat == "TRITECH"
-                    and self.id != Message.CONFIGURATION_PARAM
-                ):
-                    self.bitstream.bytepos = 0
-                    self.payload = self.bitstream.read("bytes:6")
-                    self.dataunits = self.bitstream.read("bytes:1")
-                else:
-                    self.bitstream.bytepos = 0
-                    length_string = "bytes:" + str(len(self.bitstream) / 8)
-                    self.payload = self.bitstream.read(length_string)
-
-            else:
-                pass
-
-        except ValueError as e:
-            raise Error.PacketCorrupted("Unexpected error", e)
-
-
-class Socket(object):
-    """
-    Sonar connection
-    """
-
-    def __init__(self, port, baudrate):
-        """
-
-        :param port:
-        :param baudrate:
-        """
-        self.conn = serial.Serial(timeout=2)
-        self.conn.port = port
-        self.conn.baudrate = baudrate
-	self.open()
-
-    def open(self):
-        """
-        Opens serial connection
-        :return:
-        """
-        self.conn.open()
-
-    def close(self):
-        """
-        Closes serial connection
-        :return:
-        """
-        self.conn.close()
-
-    def send(self, message, payload=None, command=None):
-        """
-        :param message:
-        :param payload:
-        :return:
-        """
-        cmd = Command(message, payload, command)
-        rospy.logdebug("Sending %s: %s", Message.to_string(message), command)
-        self.conn.write(cmd.serialize())
-
-    def _readline(self):
-        eol = b"*"
-        leneol = len(eol)
-        line = bytearray()
-        while True:
-            c = self.conn.read(1)
-            if c:
-                line += c
-                if line[-leneol:] == eol:
-                    break
-            else:
-                break
-        return bytes(line)
-
-    def get_reply(self, expected_reply=None, enabled=False):
-        """
-        Waits for and returns reply
-        :return:
-        """
-        # Wait for the header character
-        # Don't put anything in this while, because if losses packets if you do so
-        if expected_reply:
-            while not self.conn.read() == "$":
-                pass
-
-        # Initialize empty packet where the received stream will be saved
-        packet = bitstring.BitStream()
-
-        if expected_reply == ">":
-            message_id = Message.READY_2_CONFIGURE
-            rospy.logdebug("Sonar altimeter in configuration mode")
-            reply = Reply(
-                packet.append("0x{:02X}".format(ord(">"))), id=message_id
-            )
-            return reply
-
-        elif expected_reply == "$":
-            message_id = Message.DATA
-            rospy.logdebug("Received valid packet with sensor data")
-            # Convert each caracter from received string stream in the bitstream
-            current_line = []
-            # Read the message sent by altimeter. It always has length 22
-            current_line.append(self.conn.read(22))
-            # Separate fields by commas
-            char = str(current_line).split(",")
-            measurement = char[1]
-            rospy.logdebug("Received: %s", measurement)
-            return measurement  # reply
-        else:
-            rospy.logdebug("Received packet with configuration parameters")
-            message_id = Message.CONFIGURATION_PARAM
-
-        
-
-
-class VA500(object):
-    """
-    *VA500* class for sonar altimeter
-    """
-
-    MAX_TIMEOUT_COUNT = 5
+    # Headers
+    DATA_HEADER = "$"
+    CONFIGURE_HEADER = ">"
 
     def __init__(
         self,
         port="/dev/ttyUSB0",
         baudrate=115200,
-        frame_id="valeport_altimeter",
-        min_range=0,
-        max_range=10,
+        timeout=2.0,
+        max_range_m=100.0,
+        min_range_m=1.0,
+        frame_id='altimeter',
     ):
-        """
-        :param port:
-        :param baudrate: Baud rate, 115200 by default (can be 9600-115200)
-        """
         self.port = port
         self.baudrate = baudrate
+        self.timeout = timeout
+        self.writeTimeout = timeout
+        self.interCharTimeout = timeout / 30.0
 
-        self.conn = None
-        self.initialized = False
+        # Keep things thread safe
+        self.mutex = thread.allocate_lock()
+        self.connect()
 
-        # Timeout count
-        self.timeout_count = 0
-
-        self.max_range = min_range
-        self.min_range = max_range
+        res = '$'
+        self.send(self.CONFIGURE)
+        self.send(self.CONFIGURE, cr=False)
+        while self.CONFIGURE_HEADER not in res:
+            res = self.recv()
+            print('Waiting for a ">" response:', res)
+        self.port.reset_input_buffer()
+        self.port.reset_output_buffer()
+        self.set_or_get(self.SET_MAX_RANGE, max_range_m)
+        self.set_or_get(self.SET_MIN_RANGE, min_range_m)
+        self.set_or_get(self.SET_MEASURE_MODE, 'M1')
+        self.execute(self.RUN)
 
         rospy.loginfo("Valeport altimeter node is up!")
         rospy.loginfo("\t* port: %s", port)
         rospy.loginfo("\t* baudrate: %s", baudrate)
         rospy.loginfo("\t* frame_id: %s", frame_id)
-        rospy.loginfo("\t* max_range: %s", max_range)
-        rospy.loginfo("\t* min_range: %s", min_range)
+        rospy.loginfo("\t* max_range: %s", max_range_m)
+        rospy.loginfo("\t* min_range: %s", min_range_m)
 
         # Publish extracted data in personalised msg
         self.pub = rospy.Publisher("range", Range, queue_size=1)
@@ -407,117 +112,148 @@ class VA500(object):
         self.range_msg.radiation_type = 2  # Source radiation: sound
         self.range_msg.field_of_view = 0.1  # the size of the arc [rad]
         self.range_msg.header.frame_id = frame_id
-        self.range_msg.min_range = self.min_range
-        self.range_msg.max_range = self.max_range
+        self.range_msg.min_range = min_range_m
+        self.range_msg.max_range = max_range_m
 
-    def __enter__(self):
-        """
-        Initializes for first use
-        """
-        self.open()
-        return self
+    def connect(self):
+        try:
+            print("Connecting to Valeport Altimeter on port", self.port, "...")
+            self.port = serial.Serial(
+                port=self.port,
+                baudrate=self.baudrate,
+                timeout=self.timeout,
+                writeTimeout=self.writeTimeout,
+                bytesize=serial.EIGHTBITS,
+                parity=serial.PARITY_NONE,
+                stopbits=serial.STOPBITS_ONE,
+            )
+            # The next line is necessary to give the firmware time to wake up.
+            time.sleep(1)
+            print("Connected at", self.baudrate)
+            print("VA500 is ready.")
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        """
-        Cleans up
-        :param exc_type:
-        :param exc_val:
-        :param exc_tb:
-        :return:
-        """
-        self.close()
-        rospy.loginfo("Closed sonar altimeter on %s", self.port)
+        except SerialException:
+            print("Serial Exception:")
+            print(sys.exc_info())
+            print("Traceback follows:")
+            traceback.print_exc(file=sys.stdout)
+            print("Cannot connect to Arduino!")
+            os._exit(1)
 
     def open(self):
-        """
-        Initializes sonar connection
-        :return:
-        """
-        # Initialize the port
-        rospy.loginfo("Initializing altimeter on %s", self.port)
-        if not self.conn:
-            try:
-                self.conn = Socket(self.port, self.baudrate)
-            except OSError as e:
-                raise Error.SonarNotFound(self.port, e)
-        self.initialized = True
+        """Open the serial port."""
+        self.port.open()
 
     def close(self):
-        self.conn.close()
+        """Close the serial port."""
+        self.port.close()
+
+    def send(self, cmd, cr=True):
+        """
+        This command should not be used on its own: it is called
+        by the execute commands below in a thread safe manner.
+        """
+        # print('Sending command', cmd)
+        if cr:
+            self.port.write(cmd + '\r\n')
+        else:
+            self.port.write(cmd)
+        self.port.flush()
+
+    def recv(self, timeout=2.0):
+        """ 
+        This command should not be used on its own: it is called by 
+        the  execute commands below in a thread safe manner. 
+        """
+        timeout = min(timeout, self.timeout)
+        c = ""
+        value = ""
+        attempts = 0
+        while c != "\r":
+            c = self.port.read(1)
+            value += c
+            attempts += 1
+            if c == self.CONFIGURE_HEADER:
+                # print('Received', value)
+                return c
+            if attempts * self.interCharTimeout > timeout:
+                # print('Recv timed out with', value)
+                return None
+
+        # print('Received', value)
+        value = value.strip("\r").strip('\n')
+        return value
+
+    def execute(self, cmd):
+        """Thread safe execution of "cmd" returning no value."""
+        self.mutex.acquire()
+
+        try:
+            self.port.flushInput()
+        except:
+            pass
+
+        try:
+            self.send(cmd)
+            time.sleep(1)
+            reply = self.recv()
+
+            if reply == cmd:
+                print('Command', cmd, 'succeeed')
+            else:
+                print('Command did not succeed', reply)
+                return False
+        except:
+            self.mutex.release()
+            print("Exception executing command: " + cmd)
+            
+        self.mutex.release()
+        return True
+
+    def set_or_get(self, cmd, input_value=None):
+        """Thread safe execution of "cmd" returning a value."""
+        self.mutex.acquire()
+
+        try:
+            self.port.flushInput()
+        except:
+            pass
+
+        value = None
+
+        try:
+            formated_cmd = cmd
+            if input_value is not None:
+                if type(input_value) is str:
+                    formated_cmd = cmd + ';' + input_value
+                else:
+                    formated_cmd = cmd + ';' + str(int(input_value))
+            self.send(formated_cmd)
+            time.sleep(1)
+            reply = self.recv()
+            value = self.recv()
+            ret = self.recv()
+
+            if formated_cmd == reply and ret == self.CONFIGURE_HEADER:
+                print('Command', cmd, 'returned', value)
+            else:
+                print('Command did not succeed')
+                print(reply, value, ret)
+        except:
+            self.mutex.release()
+            print("Exception executing command: " + cmd)
+            
+        self.mutex.release()
+        return value
 
     def scan(self):
-        """
-        Sends command to scan
-        :return:
-        """
-        # send here something to verify sonar is connected?
-        if not self.initialized:
-            rospy.logerr("Sonar is not configured")
-            raise Error.SonarNotConfigured(self.initialized)
-
-        # Ask sonar to send a single measurement
-        self.conn.send(Message.MEASURE)
-
-        # Get the scan data
-        try:
-            data = self.get(Message.DATA, wait=1).payload
-            self.range_msg.header.stamp = rospy.Time.now()
-            self.range_msg.range = float(data)
-            self.pub.publish(self.range_msg)
-            self.timeout_count = 0
-        except Error.TimeoutError:
-            self.timeout_count += 1
-            rospy.logdebug("Timeout count: %d", self.timeout_count)
-            if self.timeout_count >= self.MAX_TIMEOUT_COUNT:
-                # Try to resend paramenters
-                self.conn.send(Message.MEASURE)
-                self.timeout_count = 0
-
-    def get(self, message=None, wait=2):
-        """
-        Sends command and returns reply
-        :param message: Message to expect
-        :param wait: Seconds to wait until received
-        :return:
-        """
-        # Verify if sonar is initialized
-        if not self.initialized:
-            raise Error.SonarNotConfigured
-
-        expected_name = Message.to_string(message)
-        if message:
-            rospy.logdebug("Waiting for %s message", expected_name)
-        else:
-            rospy.logdebug("Waiting for unlabeled message")
-
-        # Determine end time
-        start_time = datetime.datetime.now()
-        elapsed_seconds = (datetime.datetime.now() - start_time).seconds
-
-        # Wait until received if a specific message ID is requested, otherwise wait forever
-        while message is None or elapsed_seconds < wait:
-            print('Elapsed: %s s', elapsed_seconds)
-            elapsed_seconds = (datetime.datetime.now() - start_time).seconds
-            if message is None:
-                try:
-                    reply = self.conn.get_reply()
-                    return reply
-                except:
-                    break
-            else:
-                try:
-                    reply = self.conn.get_reply(message)
-                except:
-                    break
-                # Verify reply ID if requested
-            if reply.id == message:
-                rospy.logdebug("Found %s message", expected_name)
-                return reply
-            else:
-                rospy.logwarn("Received unexpected %s message", reply.name)
-        # Timeout
-        rospy.logerr("Timed out before receiving message: %s", expected_name)
-        raise Error.TimeoutError()
+        res = self.recv()
+        if res[0] != self.DATA_HEADER:
+            rospy.logwarn('Altimeter is not running...')
+        values = res.split(',')
+        self.range_msg.header.stamp = rospy.Time.now()
+        self.range_msg.range = float(values[1])
+        self.pub.publish(self.range_msg)
 
 
 def main():
@@ -532,9 +268,12 @@ def main():
     min_range_m = rospy.get_param("~min_range_m", "0")
     max_range_m = rospy.get_param("~max_range_m", "10")
 
-    va500_altimeter = VA500(port, baudrate, frame_id, min_range_m, max_range_m)
-
-    va500_altimeter.open()
+    va500_altimeter = VA500(
+        port=port, 
+        baudrate=baudrate, 
+        frame_id=frame_id, 
+        min_range_m=min_range_m, 
+        max_range_m=max_range_m)
 
     r = rospy.Rate(rate_hz)
     while not rospy.is_shutdown():
