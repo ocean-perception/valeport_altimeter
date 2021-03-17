@@ -1,16 +1,21 @@
 #!/usr/bin/env python
 
 import thread
-from math import pi as PI, degrees, radians
 import os
 import time
-import sys, traceback
+import sys
+import traceback
 from serial.serialutil import SerialException
-from serial import Serial
 import serial
+import rospy
+from sensor_msgs.msg import Range
 
 
 class VA500:
+    """
+    Enumeration of available messages
+    https://www.valeport.co.uk/content/uploads/2020/03/VA500-Altimeter-Operating-Manual-0430844f.pdf  # noqa
+    """
     # Instrument settings
     GET_SW_VERSION = '#032'
     GET_UNIT_SERIAL_NUM = '#034'
@@ -66,8 +71,9 @@ class VA500:
         port="/dev/ttyUSB0",
         baudrate=115200,
         timeout=2.0,
-        max_range=100.0,
-        min_range=1.0
+        max_range_m=100.0,
+        min_range_m=1.0,
+        frame_id='altimeter',
     ):
         self.port = port
         self.baudrate = baudrate
@@ -84,18 +90,35 @@ class VA500:
         self.send(self.CONFIGURE, cr=False)
         while self.CONFIGURE_HEADER not in res:
             res = self.recv()
-            print 'Waiting for a ">" response:', res
+            print('Waiting for a ">" response:', res)
         self.port.reset_input_buffer()
         self.port.reset_output_buffer()
-        self.set_or_get(self.SET_MAX_RANGE, max_range)
-        self.set_or_get(self.SET_MIN_RANGE, min_range)
+        self.set_or_get(self.SET_MAX_RANGE, max_range_m)
+        self.set_or_get(self.SET_MIN_RANGE, min_range_m)
         self.set_or_get(self.SET_MEASURE_MODE, 'M1')
         self.execute(self.RUN)
+
+        rospy.loginfo("Valeport altimeter node is up!")
+        rospy.loginfo("\t* port: %s", port)
+        rospy.loginfo("\t* baudrate: %s", baudrate)
+        rospy.loginfo("\t* frame_id: %s", frame_id)
+        rospy.loginfo("\t* max_range: %s", max_range_m)
+        rospy.loginfo("\t* min_range: %s", min_range_m)
+
+        # Publish extracted data in personalised msg
+        self.pub = rospy.Publisher("range", Range, queue_size=1)
+
+        self.range_msg = Range()
+        self.range_msg.radiation_type = 2  # Source radiation: sound
+        self.range_msg.field_of_view = 0.1  # the size of the arc [rad]
+        self.range_msg.header.frame_id = frame_id
+        self.range_msg.min_range = min_range_m
+        self.range_msg.max_range = max_range_m
 
     def connect(self):
         try:
             print("Connecting to Valeport Altimeter on port", self.port, "...")
-            self.port = Serial(
+            self.port = serial.Serial(
                 port=self.port,
                 baudrate=self.baudrate,
                 timeout=self.timeout,
@@ -126,10 +149,11 @@ class VA500:
         self.port.close()
 
     def send(self, cmd, cr=True):
-        """This command should not be used on its own: it is called by the execute commands
-        below in a thread safe manner.
         """
-        #print('Sending command', cmd)
+        This command should not be used on its own: it is called
+        by the execute commands below in a thread safe manner.
+        """
+        # print('Sending command', cmd)
         if cr:
             self.port.write(cmd + '\r\n')
         else:
@@ -137,11 +161,11 @@ class VA500:
         self.port.flush()
 
     def recv(self, timeout=2.0):
-        timeout = min(timeout, self.timeout)
-        """ This command should not be used on its own: it is called by the execute commands
-            below in a thread safe manner.  Note: we use read() instead of readline() since
-            readline() tends to return garbage characters from the Arduino
+        """ 
+        This command should not be used on its own: it is called by 
+        the  execute commands below in a thread safe manner. 
         """
+        timeout = min(timeout, self.timeout)
         c = ""
         value = ""
         attempts = 0
@@ -150,13 +174,13 @@ class VA500:
             value += c
             attempts += 1
             if c == self.CONFIGURE_HEADER:
-                #print('Received', value)
+                # print('Received', value)
                 return c
             if attempts * self.interCharTimeout > timeout:
-                #print('Recv timed out with', value)
+                # print('Recv timed out with', value)
                 return None
 
-        #print('Received', value)
+        # print('Received', value)
         value = value.strip("\r").strip('\n')
         return value
 
@@ -222,16 +246,40 @@ class VA500:
         self.mutex.release()
         return value
 
+    def scan(self):
+        res = self.recv()
+        if res[0] != self.DATA_HEADER:
+            rospy.logwarn('Altimeter is not running...')
+        values = res.split(',')
+        self.range_msg.header.stamp = rospy.Time.now()
+        self.range_msg.range = float(values[1])
+        self.pub.publish(self.range_msg)
 
-if __name__ == '__main__':
-    alt = VA500(
-        port='/dev/serial/by-id/usb-FTDI_FT232R_USB_UART_A107R32L-if00-port0',
-        baudrate=115200)
 
-    print("Entering main loop")
+def main():
+    # Initialize node
+    rospy.init_node("altimeter_node", log_level=rospy.DEBUG)
 
-    while True:
-        res = alt.recv()
-	print res
-        v = res.split(',')
-        print v[1], 'meters'
+    # Add private parameters
+    port = rospy.get_param("~port", "/dev/ttyUSB0")
+    baudrate = rospy.get_param("~baudrate", 115200)
+    rate_hz = rospy.get_param("~rate_hz", 1)
+    frame_id = rospy.get_param("~frame_id", "valeport_altimeter")
+    min_range_m = rospy.get_param("~min_range_m", "0")
+    max_range_m = rospy.get_param("~max_range_m", "10")
+
+    va500_altimeter = VA500(
+        port=port, 
+        baudrate=baudrate, 
+        frame_id=frame_id, 
+        min_range_m=min_range_m, 
+        max_range_m=max_range_m)
+
+    r = rospy.Rate(rate_hz)
+    while not rospy.is_shutdown():
+        va500_altimeter.scan()
+        r.sleep()
+
+
+if __name__ == "__main__":
+    main()
