@@ -90,7 +90,7 @@ class VA500:
         self.send(self.CONFIGURE, cr=False)
         while self.CONFIGURE_HEADER not in res:
             res = self.recv()
-            print('Waiting for a ">" response:', res)
+            rospy.loginfo('Waiting for a ">" response: %s', res)
         self.port.reset_input_buffer()
         self.port.reset_output_buffer()
         self.set_or_get(self.SET_MAX_RANGE, max_range_m)
@@ -117,7 +117,9 @@ class VA500:
 
     def connect(self):
         try:
-            print("Connecting to Valeport Altimeter on port", self.port, "...")
+            rospy.loginfo(
+                "Connecting to Valeport Altimeter on port %s...",
+                self.port)
             self.port = serial.Serial(
                 port=self.port,
                 baudrate=self.baudrate,
@@ -129,15 +131,15 @@ class VA500:
             )
             # The next line is necessary to give the firmware time to wake up.
             time.sleep(1)
-            print("Connected at", self.baudrate)
-            print("VA500 is ready.")
+            rospy.loginfo("Connected at %s", self.baudrate)
+            rospy.loginfo("VA500 is ready.")
 
         except SerialException:
-            print("Serial Exception:")
-            print(sys.exc_info())
-            print("Traceback follows:")
+            rospy.logerr("Serial Exception:")
+            rospy.logerr(sys.exc_info())
+            rospy.logerr("Traceback follows:")
             traceback.print_exc(file=sys.stdout)
-            print("Cannot connect to Arduino!")
+            rospy.logerr("Cannot connect to altimeter!")
             os._exit(1)
 
     def open(self):
@@ -199,13 +201,13 @@ class VA500:
             reply = self.recv()
 
             if reply == cmd:
-                print('Command', cmd, 'succeeed')
+                rospy.loginfo('Command %s succeeed', cmd)
             else:
-                print('Command did not succeed', reply)
+                rospy.loginfo('Command did not succeed %s', reply)
                 return False
         except:
             self.mutex.release()
-            print("Exception executing command: " + cmd)
+            rospy.logerr("Exception executing command: " + cmd)
             
         self.mutex.release()
         return True
@@ -235,13 +237,13 @@ class VA500:
             ret = self.recv()
 
             if formated_cmd == reply and ret == self.CONFIGURE_HEADER:
-                print('Command', cmd, 'returned', value)
+                rospy.loginfo('Command %s returned %s', cmd, value)
             else:
-                print('Command did not succeed')
-                print(reply, value, ret)
+                rospy.logerr('Command did not succeed')
+                rospy.logerr(reply, value, ret)
         except:
             self.mutex.release()
-            print("Exception executing command: " + cmd)
+            rospy.logerr("Exception executing command: %s", cmd)
             
         self.mutex.release()
         return value
