@@ -2,7 +2,6 @@ cmake_minimum_required(VERSION 2.8.3)
 project(valeport_altimeter)
 
 find_package(catkin REQUIRED COMPONENTS
-  genmsg
   geometry_msgs
   rospy
   std_msgs
@@ -13,10 +12,10 @@ find_package(catkin REQUIRED COMPONENTS
 catkin_python_setup()
 
 ## Generate messages in the 'msg' folder
-add_message_files(
-   FILES
-   Valeport_Altimeter.msg
- )
+# add_message_files(
+#   FILES
+#   Valeport_Altimeter.msg
+# )
 
 ## Generate services in the 'srv' folder
 # add_service_files(
@@ -33,16 +32,16 @@ add_message_files(
 # )
 
 ## Generate added messages and services with any dependencies listed here
-generate_messages(
-   DEPENDENCIES
-   std_msgs
- )
+#generate_messages(
+#   DEPENDENCIES
+#   std_msgs
+# )
 
 ## Generate dynamic reconfigure parameters in the 'cfg' folder
- generate_dynamic_reconfigure_options(
-   cfg/Scan.cfg
+# generate_dynamic_reconfigure_options(
+#   cfg/Scan.cfg
 #   cfg/DynReconf2.cfg
- )
+# )
 
 ###################################
 ## catkin specific configuration ##
@@ -56,7 +55,7 @@ generate_messages(
 catkin_package(
 #  INCLUDE_DIRS include
 #  LIBRARIES valeport_altimeter
-  CATKIN_DEPENDS message_runtime
+#  CATKIN_DEPENDS message_runtime
 #  DEPENDS system_lib
 )
 
