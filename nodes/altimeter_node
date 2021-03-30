@@ -250,12 +250,18 @@ class VA500:
 
     def scan(self):
         res = self.recv()
+        if res is None:
+            rospy.logwarn('Altimeter is not running...')
+            return
         if res[0] != self.DATA_HEADER:
             rospy.logwarn('Altimeter is not running...')
+            return
         values = res.split(',')
         self.range_msg.header.stamp = rospy.Time.now()
-        self.range_msg.range = float(values[1])
-        self.pub.publish(self.range_msg)
+        print values
+        if len(values) > 1:
+            self.range_msg.range = float(values[1])
+            self.pub.publish(self.range_msg)
 
 
 def main():
