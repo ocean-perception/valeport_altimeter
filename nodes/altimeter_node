@@ -106,7 +106,7 @@ class VA500:
         rospy.loginfo("\t* min_range: %s", min_range_m)
 
         # Publish extracted data in personalised msg
-        self.pub = rospy.Publisher("range", Range, queue_size=1)
+        self.pub = rospy.Publisher("driftcam/range", Range, queue_size=1)
 
         self.range_msg = Range()
         self.range_msg.radiation_type = 2  # Source radiation: sound
