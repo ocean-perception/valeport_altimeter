@@ -112,8 +112,8 @@ class VA500:
         self.range_msg.radiation_type = 2  # Source radiation: sound
         self.range_msg.field_of_view = 0.1  # the size of the arc [rad]
         self.range_msg.header.frame_id = frame_id
-        self.range_msg.min_range = min_range_m
-        self.range_msg.max_range = max_range_m
+        self.range_msg.min_range = float(min_range_m)
+        self.range_msg.max_range = float(max_range_m)
 
     def connect(self):
         try:
@@ -273,8 +273,8 @@ def main():
     baudrate = rospy.get_param("~baudrate", 115200)
     rate_hz = rospy.get_param("~rate_hz", 1)
     frame_id = rospy.get_param("~frame_id", "valeport_altimeter")
-    min_range_m = rospy.get_param("~min_range_m", "0")
-    max_range_m = rospy.get_param("~max_range_m", "10")
+    min_range_m = rospy.get_param("~min_range_m", 0)
+    max_range_m = rospy.get_param("~max_range_m", 100)
 
     va500_altimeter = VA500(
         port=port, 
